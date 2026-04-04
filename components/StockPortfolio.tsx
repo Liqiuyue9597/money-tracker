@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -124,12 +123,10 @@ export function StockPortfolio() {
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger>
-              <Button size="sm" className="rounded-xl">
-                <Plus className="h-4 w-4 mr-1" />
-                添加持仓
-              </Button>
-            </DialogTrigger>
+            <Button size="sm" className="rounded-xl" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              添加持仓
+            </Button>
             <DialogContent className="max-w-sm mx-auto rounded-2xl">
               <DialogHeader>
                 <DialogTitle>添加持仓</DialogTitle>

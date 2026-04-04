@@ -18,7 +18,7 @@ export function isSupabaseConfigured(): boolean {
 export type Currency = "CNY" | "USD" | "HKD";
 export type TransactionType = "expense" | "income";
 export type StockTransactionType = "buy" | "sell";
-export type AccountType = "debit" | "credit" | "cash" | "investment" | "crypto";
+export type AccountType = "cash" | "stock" | "crypto";
 
 export interface Account {
   id: string;
@@ -30,6 +30,7 @@ export interface Account {
   balance: number;
   sort_order: number;
   is_archived: boolean;
+  exclude_from_total: boolean;
   created_at: string;
 }
 
@@ -61,11 +62,9 @@ export interface Transaction {
 }
 
 export const ACCOUNT_TYPE_CONFIG: Record<AccountType, { label: string; defaultIcon: string }> = {
-  cash:       { label: "现金",     defaultIcon: "💵" },
-  debit:      { label: "储蓄卡",   defaultIcon: "🏦" },
-  credit:     { label: "信用卡",   defaultIcon: "💳" },
-  investment: { label: "投资账户", defaultIcon: "📈" },
-  crypto:     { label: "加密货币", defaultIcon: "₿" },
+  cash:   { label: "现金账户", defaultIcon: "💰" },
+  stock:  { label: "股票",     defaultIcon: "📈" },
+  crypto: { label: "加密货币", defaultIcon: "₿" },
 };
 
 export interface Category {
@@ -102,6 +101,22 @@ export interface StockTransaction {
   fees: number;
   created_at: string;
 }
+
+// ============ Bank / Institution Presets ============
+
+export interface BankPreset {
+  name: string;
+  icon: string;
+  /** Account types this preset applies to. Empty = all types. */
+  types: AccountType[];
+}
+
+export const BANK_PRESETS: BankPreset[] = [
+  { name: "微信支付", icon: "💬", types: ["cash"] },
+  { name: "支付宝",   icon: "🔵", types: ["cash"] },
+  { name: "招商银行", icon: "🏦", types: ["cash"] },
+  { name: "中国银行", icon: "🏦", types: ["cash"] },
+];
 
 // ============ Default Categories ============
 

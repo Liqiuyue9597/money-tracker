@@ -30,6 +30,7 @@ export function Dashboard() {
   const [stockValue, setStockValue] = useState(0);
   const [stockPnL, setStockPnL] = useState(0);
   const [rates, setRates] = useState<ExchangeRates | null>(null);
+  const [usdRates, setUsdRates] = useState<ExchangeRates | null>(null);
   const [loading, setLoading] = useState(true);
   const [recentTransactions, setRecentTransactions] = useState<
     (Transaction & {
@@ -49,7 +50,7 @@ export function Dashboard() {
     const mStart = format(startOfMonth(now), "yyyy-MM-dd");
     const mEnd = format(endOfMonth(now), "yyyy-MM-dd");
 
-    const [txRes, stockRes, ratesData] = await Promise.all([
+    const [txRes, stockRes, ratesData, usdRatesData] = await Promise.all([
       supabase
         .from("transactions")
         .select("*, categories(name, icon), accounts(name, icon)")
@@ -60,9 +61,11 @@ export function Dashboard() {
         .order("created_at", { ascending: false }),
       supabase.from("stock_holdings").select("*").eq("user_id", user.id),
       getExchangeRates(mainCurrency).catch(() => null),
+      getExchangeRates("USD").catch(() => null),
     ]);
 
     if (ratesData) setRates(ratesData);
+    if (usdRatesData) setUsdRates(usdRatesData);
 
     if (txRes.data) {
       let exp = 0;
@@ -255,13 +258,13 @@ export function Dashboard() {
         </Card>
       )}
 
-      {/* Exchange Rates */}
-      {rates && (
+      {/* Exchange Rates — based on 1 USD */}
+      {usdRates && (
         <Card className="mb-4">
           <CardContent className="pt-0">
             <div className="flex items-center gap-2 mb-3">
               <DollarSign className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">实时汇率</span>
+              <span className="font-medium text-sm">实时汇率（1 USD）</span>
             </div>
             <div className="grid grid-cols-3 gap-3">
               {(["CNY", "USD", "HKD"] as Currency[]).map((c) => (
@@ -273,9 +276,9 @@ export function Dashboard() {
                     {CURRENCIES[c].name}
                   </p>
                   <p className="text-sm font-semibold tabular-nums">
-                    {c === mainCurrency
+                    {c === "USD"
                       ? "1.0000"
-                      : (rates.rates[c] || 0).toFixed(4)}
+                      : (usdRates.rates[c] || 0).toFixed(4)}
                   </p>
                 </div>
               ))}

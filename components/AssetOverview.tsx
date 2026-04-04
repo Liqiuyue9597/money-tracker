@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useApp } from "@/components/AppProvider";
-import { supabase, type Account, type Currency, type CryptoHolding, CURRENCIES, ACCOUNT_TYPE_CONFIG, formatMoney } from "@/lib/supabase";
+import { supabase, type Account, type Currency, type CryptoHolding, CURRENCIES, formatMoney } from "@/lib/supabase";
 import type { StockHolding } from "@/lib/supabase";
 import { getStockQuotes } from "@/lib/stocks";
 import { getCryptoPrices, type CryptoPrice, CRYPTO_SYMBOLS } from "@/lib/crypto";
@@ -27,6 +27,7 @@ import {
 export function AssetOverview() {
   const { user, accounts, mainCurrency, refreshAccounts } = useApp();
   const [rates, setRates] = useState<ExchangeRates | null>(null);
+  const [usdRates, setUsdRates] = useState<ExchangeRates | null>(null);
   const [stockValue, setStockValue] = useState(0);
   const [stockCost, setStockCost] = useState(0);
   const [stockCurrency, setStockCurrency] = useState<Currency>("USD");
@@ -46,12 +47,14 @@ export function AssetOverview() {
 
   async function loadData() {
     setLoading(true);
-    const [ratesData, stockRes, cryptoRes] = await Promise.all([
+    const [ratesData, usdRatesData, stockRes, cryptoRes] = await Promise.all([
       getExchangeRates(mainCurrency).catch(() => null),
+      getExchangeRates("USD").catch(() => null),
       supabase.from("stock_holdings").select("*").eq("user_id", user!.id),
       supabase.from("crypto_holdings").select("*").eq("user_id", user!.id).order("created_at", { ascending: false }),
     ]);
     if (ratesData) setRates(ratesData);
+    if (usdRatesData) setUsdRates(usdRatesData);
 
     // Stocks
     if (stockRes.data && stockRes.data.length > 0) {
@@ -86,9 +89,10 @@ export function AssetOverview() {
     setLoading(false);
   }
 
-  const cashAndDebit = accounts.filter((a) => a.type === "cash" || a.type === "debit");
-  const creditCards = accounts.filter((a) => a.type === "credit");
-  const investmentAccounts = accounts.filter((a) => a.type === "investment");
+  // All cash-type accounts split by balance
+  const cashAccounts = accounts.filter((a) => a.type === "cash");
+  const positiveAccounts = cashAccounts.filter((a) => Number(a.balance) >= 0);
+  const negativeAccounts = cashAccounts.filter((a) => Number(a.balance) < 0);
   const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
 
   // Crypto totals
@@ -100,10 +104,12 @@ export function AssetOverview() {
     totalCryptoCost += Number(h.buy_price) * Number(h.quantity);
   }
 
-  // Net worth
+  // Net worth (exclude accounts with exclude_from_total)
   let totalNetWorth = 0;
   for (const acc of accounts) {
-    totalNetWorth += convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
+    if (!acc.exclude_from_total) {
+      totalNetWorth += convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
+    }
   }
   if (stockValue > 0) totalNetWorth += convertCurrency(stockValue, stockCurrency, mainCurrency, rateMap);
   if (totalCryptoValue > 0) totalNetWorth += convertCurrency(totalCryptoValue, "USD", mainCurrency, rateMap);
@@ -161,23 +167,26 @@ export function AssetOverview() {
         </CardContent>
       </Card>
 
-      {/* Cash & Debit */}
-      {cashAndDebit.length > 0 && (
+      {/* Positive balance accounts: 储蓄与支付 */}
+      {positiveAccounts.length > 0 && (
         <div className="mb-4">
           <div className="text-xs text-muted-foreground mb-2 px-1 flex items-center gap-1.5">
             <Landmark className="h-3.5 w-3.5" /> 储蓄与支付
           </div>
           <Card className="border-0 shadow-sm overflow-hidden">
             <CardContent className="p-0">
-              {cashAndDebit.map((acc, i) => (
+              {positiveAccounts.map((acc, i) => (
                 <button key={acc.id} onClick={() => { setEditAccount(acc); setManagerOpen(true); }}
                   className={`flex w-full items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors active:bg-muted ${i > 0 ? "border-t" : ""}`}>
                   <span className="text-2xl">{acc.icon}</span>
                   <div className="flex-1 text-left">
-                    <div className="text-sm font-medium">{acc.name}</div>
+                    <div className="text-sm font-medium flex items-center gap-1.5">
+                      {acc.name}
+                      {acc.exclude_from_total && <span className="text-[10px] text-[#A8A29E] bg-[#F0EFED] px-1.5 py-0.5 rounded">不计入</span>}
+                    </div>
                     <div className="text-[10px] text-muted-foreground">{CURRENCIES[acc.currency].name}</div>
                   </div>
-                  <div className="font-semibold tabular-nums text-sm">{formatMoney(Number(acc.balance), acc.currency)}</div>
+                  <div className={`font-semibold tabular-nums text-sm ${acc.exclude_from_total ? "text-muted-foreground" : ""}`}>{formatMoney(Number(acc.balance), acc.currency)}</div>
                 </button>
               ))}
             </CardContent>
@@ -185,26 +194,31 @@ export function AssetOverview() {
         </div>
       )}
 
-      {/* Credit Cards */}
-      {creditCards.length > 0 && (
+      {/* Negative balance accounts: 待还 */}
+      {negativeAccounts.length > 0 && (
         <div className="mb-4">
           <div className="text-xs text-muted-foreground mb-2 px-1 flex items-center gap-1.5">
-            <CreditCard className="h-3.5 w-3.5" /> 信用卡
+            <CreditCard className="h-3.5 w-3.5" /> 待还
           </div>
           <Card className="border-0 shadow-sm overflow-hidden">
             <CardContent className="p-0">
-              {creditCards.map((acc, i) => {
+              {negativeAccounts.map((acc, i) => {
                 const bal = Number(acc.balance);
                 return (
                   <button key={acc.id} onClick={() => { setEditAccount(acc); setManagerOpen(true); }}
                     className={`flex w-full items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors ${i > 0 ? "border-t" : ""}`}>
                     <span className="text-2xl">{acc.icon}</span>
-                    <div className="flex-1 text-left"><div className="text-sm font-medium">{acc.name}</div></div>
-                    <div className="text-right">
-                      <div className={`font-semibold tabular-nums text-sm ${bal < 0 ? "text-red-600" : ""}`}>
-                        {bal < 0 ? "-" : ""}{formatMoney(bal, acc.currency)}
+                    <div className="flex-1 text-left">
+                      <div className="text-sm font-medium flex items-center gap-1.5">
+                        {acc.name}
+                        {acc.exclude_from_total && <span className="text-[10px] text-[#A8A29E] bg-[#F0EFED] px-1.5 py-0.5 rounded">不计入</span>}
                       </div>
-                      {bal < 0 && <div className="text-[10px] text-red-500">待还</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold tabular-nums text-sm text-red-600">
+                        -{formatMoney(bal, acc.currency)}
+                      </div>
+                      <div className="text-[10px] text-red-500">待还</div>
                     </div>
                   </button>
                 );
@@ -214,31 +228,46 @@ export function AssetOverview() {
         </div>
       )}
 
-      {/* Investments: Stocks */}
-      {stockValue > 0 && (
-        <div className="mb-4">
-          <div className="text-xs text-muted-foreground mb-2 px-1 flex items-center gap-1.5">
+      {/* Stocks — always show, with empty state */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5" /> 股票
           </div>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">📈</span>
-                  <span className="text-sm font-medium">股票组合</span>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, stockCurrency)}</div>
-                  <div className={`text-xs font-medium tabular-nums ${stockValue >= stockCost ? "text-emerald-600" : "text-red-600"}`}>
+          <a href="/stocks" className="text-xs text-primary font-medium">
+            管理
+          </a>
+        </div>
+
+        {stockValue > 0 ? (
+          <Card className="border-0 shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <a href="/stocks" className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
+                <span className="text-2xl">📈</span>
+                <div className="flex-1 text-left">
+                  <div className="text-sm font-medium">股票组合</div>
+                  <div className={`text-[10px] font-medium tabular-nums ${stockValue >= stockCost ? "text-emerald-600" : "text-red-600"}`}>
                     {stockValue >= stockCost ? "+" : ""}{(stockValue - stockCost).toFixed(2)}
                     {stockCost > 0 && ` (${(((stockValue - stockCost) / stockCost) * 100).toFixed(1)}%)`}
                   </div>
                 </div>
-              </div>
+                <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, stockCurrency)}</div>
+              </a>
             </CardContent>
           </Card>
-        </div>
-      )}
+        ) : (
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-4 text-center">
+              <p className="text-sm text-muted-foreground">暂无股票持仓</p>
+              <a href="/stocks">
+                <Button variant="outline" size="sm" className="mt-2 rounded-xl">
+                  <Plus className="h-4 w-4 mr-1" /> 添加股票
+                </Button>
+              </a>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Crypto */}
       <div className="mb-4">
@@ -325,18 +354,20 @@ export function AssetOverview() {
         )}
       </div>
 
-      {/* Exchange Rates */}
-      {rates && (
+      {/* Exchange Rates — always based on 1 USD */}
+      {usdRates && (
         <Card className="mb-4 border-0 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-              <DollarSign className="h-3.5 w-3.5" /> 实时汇率
+              <DollarSign className="h-3.5 w-3.5" /> 实时汇率（1 USD）
             </div>
             <div className="grid grid-cols-3 gap-3 text-center">
               {(["CNY", "USD", "HKD"] as Currency[]).map((c) => (
                 <div key={c}>
                   <div className="text-xs text-muted-foreground">{CURRENCIES[c].name}</div>
-                  <div className="font-bold tabular-nums text-sm">{c === mainCurrency ? "1.0000" : (rateMap[c] || 0).toFixed(4)}</div>
+                  <div className="font-bold tabular-nums text-sm">
+                    {c === "USD" ? "1.0000" : (usdRates.rates[c] || 0).toFixed(4)}
+                  </div>
                 </div>
               ))}
             </div>
