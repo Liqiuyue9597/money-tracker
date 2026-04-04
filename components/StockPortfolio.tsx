@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { supabase, type StockHolding, type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { supabase, type StockHolding, type Currency, CURRENCIES } from "@/lib/supabase";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,22 @@ function isFundSymbol(symbol: string): boolean {
   return /^\d{6}$/.test(symbol);
 }
 
+/** Get holding type for grouping and display */
+function getHoldingType(symbol: string): "fund" | "hk" | "us" {
+  if (isFundSymbol(symbol)) return "fund";
+  if (symbol.endsWith(".HK")) return "hk";
+  return "us";
+}
+
+/** Get type label for display */
+function getTypeLabel(type: "fund" | "hk" | "us"): string {
+  switch (type) {
+    case "fund": return "基金";
+    case "hk": return "港股";
+    case "us": return "美股";
+  }
+}
+
 export function StockPortfolio() {
   const { user } = useApp();
   const [holdings, setHoldings] = useState<StockHolding[]>([]);
@@ -37,24 +53,29 @@ export function StockPortfolio() {
   const [buyPrice, setBuyPrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [currency, setCurrency] = useState<Currency>("USD");
+  const [holdingType, setHoldingType] = useState<"us" | "hk" | "fund">("us");
 
   // Manual price edit dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editSymbol, setEditSymbol] = useState("");
   const [editPrice, setEditPrice] = useState("");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (user) loadHoldings();
   }, [user]);
 
-  // Auto-detect currency when symbol changes
+  // Auto-detect holding type when symbol changes
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();
     if (isFundSymbol(sym)) {
+      setHoldingType("fund");
       setCurrency("CNY");
     } else if (sym.endsWith(".HK")) {
+      setHoldingType("hk");
       setCurrency("HKD");
     } else if (sym.length > 0) {
+      setHoldingType("us");
       setCurrency("USD");
     }
   }, [symbol]);
@@ -91,8 +112,6 @@ export function StockPortfolio() {
     setRefreshing(false);
   }, [holdings]);
 
-  const [adding, setAdding] = useState(false);
-
   async function handleAdd() {
     if (!user || !symbol || !buyPrice || !quantity) {
       toast.error("请填写完整信息");
@@ -101,27 +120,29 @@ export function StockPortfolio() {
 
     setAdding(true);
     try {
-    const { error } = await supabase.from("stock_holdings").insert({
-      user_id: user.id,
-      symbol: symbol.toUpperCase(),
-      name: name || symbol.toUpperCase(),
-      buy_price: parseFloat(buyPrice),
-      quantity: parseFloat(quantity),
-      buy_date: new Date().toISOString().split("T")[0],
-      currency,
-    });
+      const { error } = await supabase.from("stock_holdings").insert({
+        user_id: user.id,
+        symbol: symbol.toUpperCase(),
+        name: name || symbol.toUpperCase(),
+        buy_price: parseFloat(buyPrice),
+        quantity: parseFloat(quantity),
+        buy_date: new Date().toISOString().split("T")[0],
+        currency,
+      });
 
-    if (error) {
-      toast.error("添加失败: " + error.message);
-    } else {
-      toast.success(`已添加 ${symbol.toUpperCase()}`);
-      setSymbol("");
-      setName("");
-      setBuyPrice("");
-      setQuantity("");
-      setDialogOpen(false);
-      loadHoldings();
-    }
+      if (error) {
+        toast.error("添加失败: " + error.message);
+      } else {
+        toast.success(`已添加 ${symbol.toUpperCase()}`);
+        setSymbol("");
+        setName("");
+        setBuyPrice("");
+        setQuantity("");
+        setHoldingType("us");
+        setCurrency("USD");
+        setDialogOpen(false);
+        loadHoldings();
+      }
     } finally {
       setAdding(false);
     }
@@ -158,9 +179,66 @@ export function StockPortfolio() {
     return 0;
   }
 
-  // Calculate totals
-  let totalCost = 0;
-  let totalValue = 0;
+  /** Group holdings by type and sort by created_at */
+  const groupedHoldings = useMemo(() => {
+    const groups: Record<"fund" | "hk" | "us", StockHolding[]> = {
+      fund: [],
+      hk: [],
+      us: [],
+    };
+
+    holdings.forEach((h) => {
+      const type = getHoldingType(h.symbol);
+      groups[type].push(h);
+    });
+
+    // Sort each group: by created_at descending (newest first)
+    Object.keys(groups).forEach((key) => {
+      groups[key as "fund" | "hk" | "us"].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+
+    return groups;
+  }, [holdings]);
+
+  /** Get totals for each type */
+  const typeTotals = useMemo(() => {
+    const totals: Record<"fund" | "hk" | "us", { cost: number; value: number }> = {
+      fund: { cost: 0, value: 0 },
+      hk: { cost: 0, value: 0 },
+      us: { cost: 0, value: 0 },
+    };
+
+    Object.entries(groupedHoldings).forEach(([type, items]) => {
+      items.forEach((h) => {
+        const cost = Number(h.buy_price) * Number(h.quantity);
+        const currentPrice = getEffectivePrice(h.symbol);
+        const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
+        totals[type as "fund" | "hk" | "us"].cost += cost;
+        totals[type as "fund" | "hk" | "us"].value += value;
+      });
+    });
+
+    return totals;
+  }, [groupedHoldings, quotes, manualPrices]);
+
+  /** Calculate total portfolio values */
+  const totalCost = useMemo(() =>
+    Object.values(typeTotals).reduce((sum, t) => sum + t.cost, 0),
+    [typeTotals]
+  );
+
+  const totalValue = useMemo(() =>
+    Object.values(typeTotals).reduce((sum, t) => sum + t.value, 0),
+    [typeTotals]
+  );
+
+  const totalPnL = totalValue - totalCost;
+  const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
+
+  // Order: fund → hk → us
+  const types: Array<"fund" | "hk" | "us"> = ["fund", "hk", "us"];
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-24">
@@ -187,41 +265,72 @@ export function StockPortfolio() {
                 <DialogTitle>添加持仓</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
+                {/* Type selector */}
+                <div className="flex gap-1 rounded-xl bg-muted p-1">
+                  {types.map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setHoldingType(type);
+                        switch (type) {
+                          case "fund": setCurrency("CNY"); break;
+                          case "hk": setCurrency("HKD"); break;
+                          case "us": setCurrency("USD"); break;
+                        }
+                      }}
+                      className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
+                        holdingType === type ? "bg-background shadow-sm" : "text-muted-foreground"
+                      }`}
+                    >
+                      {getTypeLabel(type)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Symbol input */}
                 <Input
-                  placeholder="股票代码 (如 AAPL, 0700.HK) 或基金代码 (如 000979)"
+                  placeholder={holdingType === "fund" ? "基金代码 (如 000979)" :
+                            holdingType === "hk" ? "港股代码 (如 0700.HK)" :
+                            "美股代码 (如 AAPL)"}
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                   className="rounded-xl"
                 />
+
+                {/* Name input */}
                 <Input
-                  placeholder={isFundSymbol(symbol.trim()) ? "基金名称（选填）" : "股票名称（选填）"}
+                  placeholder={holdingType === "fund" ? "基金名称（选填）" : "股票名称（选填）"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="rounded-xl"
                 />
+
+                {/* Buy price and quantity */}
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     type="number"
-                    placeholder={isFundSymbol(symbol.trim()) ? "买入净值" : "买入价格"}
+                    placeholder={holdingType === "fund" ? "买入净值" : "买入价格"}
                     value={buyPrice}
                     onChange={(e) => setBuyPrice(e.target.value)}
-                    step="0.01"
+                    step={holdingType === "fund" ? "0.0001" : "0.01"}
                     className="rounded-xl"
                   />
                   <Input
                     type="number"
-                    placeholder={isFundSymbol(symbol.trim()) ? "持有份额" : "持仓数量"}
+                    placeholder={holdingType === "fund" ? "持有份额" : "持仓数量"}
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     step="0.01"
                     className="rounded-xl"
                   />
                 </div>
-                <div className="flex gap-1 rounded-xl bg-muted p-1">
+
+                {/* Currency selector (disabled, auto-set by type) */}
+                <div className="flex gap-1 rounded-xl bg-muted p-1 opacity-50">
                   {(["USD", "HKD", "CNY"] as Currency[]).map((c) => (
                     <button
                       key={c}
-                      onClick={() => setCurrency(c)}
+                      disabled
                       className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
                         currency === c ? "bg-background shadow-sm" : "text-muted-foreground"
                       }`}
@@ -230,6 +339,7 @@ export function StockPortfolio() {
                     </button>
                   ))}
                 </div>
+
                 <Button onClick={handleAdd} disabled={adding} className="w-full rounded-xl">
                   {adding ? "添加中..." : "确认添加"}
                 </Button>
@@ -244,43 +354,28 @@ export function StockPortfolio() {
         <Card className="mb-4 border-0 bg-gradient-to-br from-primary/5 to-primary/10">
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground mb-1">投资组合总览</div>
-            {(() => {
-              totalCost = 0;
-              totalValue = 0;
-              holdings.forEach((h) => {
-                const cost = Number(h.buy_price) * Number(h.quantity);
-                const currentPrice = getEffectivePrice(h.symbol);
-                const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
-                totalCost += cost;
-                totalValue += value;
-              });
-              const totalPnL = totalValue - totalCost;
-              const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
-              return (
-                <div className="flex items-end justify-between">
-                  <div>
-                    <div className="text-2xl font-bold tabular-nums">
-                      ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      成本 ${totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div className={`text-right ${totalPnL >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    <div className="flex items-center gap-1 text-lg font-bold tabular-nums">
-                      {totalPnL >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                      {totalPnL >= 0 ? "+" : ""}{totalPnL.toFixed(2)}
-                    </div>
-                    <div className="text-xs tabular-nums">{totalPnLPct >= 0 ? "+" : ""}{totalPnLPct.toFixed(2)}%</div>
-                  </div>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-2xl font-bold tabular-nums">
+                  ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-              );
-            })()}
+                <div className="text-xs text-muted-foreground">
+                  成本 ${totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className={`text-right ${totalPnL >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                <div className="flex items-center gap-1 text-lg font-bold tabular-nums">
+                  {totalPnL >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                  {totalPnL >= 0 ? "+" : ""}{totalPnL.toFixed(2)}
+                </div>
+                <div className="text-xs tabular-nums">{totalPnLPct >= 0 ? "+" : ""}{totalPnLPct.toFixed(2)}%</div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Holdings List */}
+      {/* Holdings List - Grouped by Type */}
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">加载中...</div>
       ) : holdings.length === 0 ? (
@@ -290,84 +385,109 @@ export function StockPortfolio() {
           <p className="text-xs mt-1">点击"添加持仓"开始追踪你的投资</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {holdings.map((h) => {
-            const quote = quotes[h.symbol];
-            const currentPrice = getEffectivePrice(h.symbol);
-            const cost = Number(h.buy_price) * Number(h.quantity);
-            const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
-            const pnl = value - cost;
-            const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
-            const isFund = quote?.isFund || isFundSymbol(h.symbol);
-            const isManual = !quote?.price && manualPrices[h.symbol] !== undefined;
+        types.map((type) => {
+          const items = groupedHoldings[type];
+          const totals = typeTotals[type];
 
-            return (
-              <Card key={h.id} className="border-0 shadow-sm overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm">{h.symbol}</span>
-                        <Badge variant="secondary" className="text-[10px] px-1.5">
-                          {isFund ? "基金" : h.currency}
-                        </Badge>
-                        {isManual && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 text-amber-600 border-amber-300">
-                            手动
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {quote?.name || h.name || h.symbol}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 tabular-nums">
-                        {Number(h.quantity)} {isFund ? "份" : "股"} × {CURRENCIES[h.currency].symbol}{Number(h.buy_price).toFixed(isFund ? 4 : 2)}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      {currentPrice > 0 ? (
-                        <>
-                          <div className="font-bold tabular-nums text-sm">
-                            {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
+          if (items.length === 0) return null;
+
+          const pnl = totals.value - totals.cost;
+          const pnlPct = totals.cost > 0 ? (pnl / totals.cost) * 100 : 0;
+
+          return (
+            <div key={type} className="mb-4">
+              {/* Type Header */}
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">{getTypeLabel(type)}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {items.length}
+                  </Badge>
+                </div>
+                <div className={`text-xs font-semibold tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                </div>
+              </div>
+
+              {/* Holdings for this type */}
+              <div className="space-y-2">
+                {items.map((h) => {
+                  const quote = quotes[h.symbol];
+                  const currentPrice = getEffectivePrice(h.symbol);
+                  const cost = Number(h.buy_price) * Number(h.quantity);
+                  const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
+                  const individualPnL = value - cost;
+                  const individualPnLPct = cost > 0 ? (individualPnL / cost) * 100 : 0;
+                  const isFund = type === "fund";
+                  const isManual = !quote?.price && manualPrices[h.symbol] !== undefined;
+
+                  return (
+                    <Card key={h.id} className="border-0 shadow-sm overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm">{h.symbol}</span>
+                              {isManual && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 text-amber-600 border-amber-300">
+                                  手动
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {quote?.name || h.name || h.symbol}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 tabular-nums">
+                              {Number(h.quantity)} {isFund ? "份" : "股"} × {CURRENCIES[h.currency].symbol}{Number(h.buy_price).toFixed(isFund ? 4 : 2)}
+                            </div>
                           </div>
-                          <div
-                            className={`text-xs font-semibold tabular-nums ${
-                              pnl >= 0 ? "text-emerald-600" : "text-red-600"
-                            }`}
-                          >
-                            {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                          <div className="text-right">
+                            {currentPrice > 0 ? (
+                              <>
+                                <div className="font-bold tabular-nums text-sm">
+                                  {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
+                                </div>
+                                <div
+                                  className={`text-xs font-semibold tabular-nums ${
+                                    individualPnL >= 0 ? "text-emerald-600" : "text-red-600"
+                                  }`}
+                                >
+                                  {individualPnL >= 0 ? "+" : ""}{individualPnL.toFixed(2)} ({individualPnLPct >= 0 ? "+" : ""}{individualPnLPct.toFixed(2)}%)
+                                </div>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => openEditDialog(h.symbol, 0)}
+                                className="text-xs text-primary hover:underline"
+                              >
+                                手动输入价格
+                              </button>
+                            )}
                           </div>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => openEditDialog(h.symbol, 0)}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          手动输入价格
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex flex-col ml-1 gap-0.5">
-                      <button
-                        onClick={() => openEditDialog(h.symbol, currentPrice)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                        title="手动更新价格"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(h.id)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                          <div className="flex flex-col ml-1 gap-0.5">
+                            <button
+                              onClick={() => openEditDialog(h.symbol, currentPrice)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="手动更新价格"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(h.id)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })
       )}
 
       {/* Manual Price Edit Dialog */}
