@@ -113,19 +113,19 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 - 主要接口: Transaction, Category, Account, StockHolding, CryptoHolding
 
 ## 全局状态 (AppProvider)
-通过 React Context 提供:
+通过 React Context 提供（value 已用 useMemo 优化，函数用 useCallback 包裹）:
 - `user` — Supabase Auth 用户
 - `categories` — 用户分类列表
 - `accounts` — 用户账户列表 (过滤 is_archived)
 - `mainCurrency` — 主币种 (默认 CNY)
 - `signIn/signUp/signOut` — 认证方法
-- `refreshCategories/refreshAccounts` — 刷新数据
+- `refreshCategories/refreshAccounts` — 刷新数据（含 try/catch 错误处理）
 
 ## 汇率显示
 - 所有页面（Dashboard + AssetOverview）统一以 **1 USD 为基准**显示汇率
 - 内部货币换算仍使用 mainCurrency 为基准的汇率（rates state）
 - 显示用的 USD 汇率单独请求（usdRates state）
-- 汇率 API: open.er-api.com，1 小时客户端缓存 + 1 小时服务端缓存
+- 汇率 API: open.er-api.com，1 小时客户端缓存（按币种独立 Map 缓存）+ 1 小时服务端缓存
 
 ## UI 风格
 - shadcn/ui 圆角卡片风格 (Card, Badge, Separator, Dialog 等)
@@ -162,3 +162,17 @@ vercel --prod        # 手动部署到生产
 - supabase.ts 中 URL 有 placeholder 兜底，避免构建时静态生成报错
 - 汇率 API 有 1 小时客户端缓存，股票/加密货币 5 分钟服务端缓存
 - accounts.balance **只能通过交易触发器修改**，创建时可设初始余额，之后不可手动改
+
+## API 路由安全规范
+所有 API 路由（stocks / crypto / exchange）均遵循以下规范：
+- **输入验证**: 参数长度限制（max 200 chars）+ 正则白名单校验，非法输入返回 400
+- **请求超时**: 8 秒 `AbortSignal.timeout()`，超时返回 504
+- **错误响应**: 外部 API 不可用时返回 503（不返回虚假硬编码数据），优先使用过期缓存（stale cache）兜底
+- **缓存策略**: exchange 使用 `Map<base, cache>` 按币种独立缓存，crypto 使用 `VALID_IDS` 白名单过滤
+- **`??` 替代 `||`**: 数值字段用 `??` 避免 0 被当作 falsy
+
+## 前端性能规范
+- **AppProvider**: context value 用 `useMemo` 包裹，所有函数用 `useCallback`，避免全局重渲染
+- **计算密集型派生数据**: 必须用 `useMemo`（如 TransactionList 的过滤/分组/合计，AssetOverview 的净值/加密货币总值计算）
+- **异步操作**: 所有 async 函数必须 `try/catch/finally`，finally 中重置 loading 状态，catch 中用 `toast.error()` 提示 + `console.error()` 记录
+- **数据库操作**: 检查 `{ error }` 返回值，成功后用 `toast.success()` 确认，失败时不做乐观更新

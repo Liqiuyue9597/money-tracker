@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type Account, type Currency, type CryptoHolding, CURRENCIES, formatMoney } from "@/lib/supabase";
 import type { StockHolding } from "@/lib/supabase";
@@ -46,73 +46,89 @@ export function AssetOverview() {
   }, [user, mainCurrency]);
 
   async function loadData() {
+    if (!user) return;
     setLoading(true);
-    const [ratesData, usdRatesData, stockRes, cryptoRes] = await Promise.all([
-      getExchangeRates(mainCurrency).catch(() => null),
-      getExchangeRates("USD").catch(() => null),
-      supabase.from("stock_holdings").select("*").eq("user_id", user!.id),
-      supabase.from("crypto_holdings").select("*").eq("user_id", user!.id).order("created_at", { ascending: false }),
-    ]);
-    if (ratesData) setRates(ratesData);
-    if (usdRatesData) setUsdRates(usdRatesData);
+    try {
+      const [ratesData, usdRatesData, stockRes, cryptoRes] = await Promise.all([
+        getExchangeRates(mainCurrency).catch(() => null),
+        getExchangeRates("USD").catch(() => null),
+        supabase.from("stock_holdings").select("*").eq("user_id", user.id),
+        supabase.from("crypto_holdings").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      ]);
+      if (ratesData) setRates(ratesData);
+      if (usdRatesData) setUsdRates(usdRatesData);
 
-    // Stocks
-    if (stockRes.data && stockRes.data.length > 0) {
-      try {
-        const symbols = [...new Set(stockRes.data.map((s: StockHolding) => s.symbol))];
-        const quotes = await getStockQuotes(symbols);
-        let totalVal = 0, totalCost = 0;
-        for (const h of stockRes.data as StockHolding[]) {
-          const q = quotes[h.symbol];
-          const cost = Number(h.buy_price) * Number(h.quantity);
-          totalCost += cost;
-          totalVal += q ? q.price * Number(h.quantity) : cost;
-        }
-        setStockValue(totalVal);
-        setStockCost(totalCost);
-        if (stockRes.data.length > 0) setStockCurrency(stockRes.data[0].currency);
-      } catch {}
-    }
-
-    // Crypto
-    if (cryptoRes.data) {
-      setCryptoHoldings(cryptoRes.data);
-      if (cryptoRes.data.length > 0) {
+      // Stocks
+      if (stockRes.data && stockRes.data.length > 0) {
         try {
-          const symbols = [...new Set(cryptoRes.data.map((c) => c.symbol))];
-          const prices = await getCryptoPrices(symbols);
-          setCryptoPrices(prices);
-        } catch {}
+          const symbols = [...new Set(stockRes.data.map((s: StockHolding) => s.symbol))];
+          const quotes = await getStockQuotes(symbols);
+          let totalVal = 0, totalCost = 0;
+          for (const h of stockRes.data as StockHolding[]) {
+            const q = quotes[h.symbol];
+            const cost = Number(h.buy_price) * Number(h.quantity);
+            totalCost += cost;
+            totalVal += q ? q.price * Number(h.quantity) : cost;
+          }
+          setStockValue(totalVal);
+          setStockCost(totalCost);
+          if (stockRes.data.length > 0) setStockCurrency(stockRes.data[0].currency);
+        } catch (err) {
+          console.error("Failed to load stock quotes:", err);
+        }
       }
-    }
 
-    setLoading(false);
+      // Crypto
+      if (cryptoRes.data) {
+        setCryptoHoldings(cryptoRes.data);
+        if (cryptoRes.data.length > 0) {
+          try {
+            const symbols = [...new Set(cryptoRes.data.map((c) => c.symbol))];
+            const prices = await getCryptoPrices(symbols);
+            setCryptoPrices(prices);
+          } catch (err) {
+            console.error("Failed to load crypto prices:", err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load asset data:", err);
+      toast.error("加载资产数据失败");
+    } finally {
+      setLoading(false);
+    }
   }
 
   // All cash-type accounts split by balance
-  const cashAccounts = accounts.filter((a) => a.type === "cash");
-  const positiveAccounts = cashAccounts.filter((a) => Number(a.balance) >= 0);
-  const negativeAccounts = cashAccounts.filter((a) => Number(a.balance) < 0);
+  const cashAccounts = useMemo(() => accounts.filter((a) => a.type === "cash"), [accounts]);
+  const positiveAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) >= 0), [cashAccounts]);
+  const negativeAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) < 0), [cashAccounts]);
   const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
 
   // Crypto totals
-  let totalCryptoValue = 0;
-  let totalCryptoCost = 0;
-  for (const h of cryptoHoldings) {
-    const price = cryptoPrices[h.symbol]?.usd || 0;
-    totalCryptoValue += price * Number(h.quantity);
-    totalCryptoCost += Number(h.buy_price) * Number(h.quantity);
-  }
+  const { totalCryptoValue, totalCryptoCost } = useMemo(() => {
+    let value = 0;
+    let cost = 0;
+    for (const h of cryptoHoldings) {
+      const price = cryptoPrices[h.symbol]?.usd || 0;
+      value += price * Number(h.quantity);
+      cost += Number(h.buy_price) * Number(h.quantity);
+    }
+    return { totalCryptoValue: value, totalCryptoCost: cost };
+  }, [cryptoHoldings, cryptoPrices]);
 
   // Net worth (exclude accounts with exclude_from_total)
-  let totalNetWorth = 0;
-  for (const acc of accounts) {
-    if (!acc.exclude_from_total) {
-      totalNetWorth += convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
+  const totalNetWorth = useMemo(() => {
+    let netWorth = 0;
+    for (const acc of accounts) {
+      if (!acc.exclude_from_total) {
+        netWorth += convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
+      }
     }
-  }
-  if (stockValue > 0) totalNetWorth += convertCurrency(stockValue, stockCurrency, mainCurrency, rateMap);
-  if (totalCryptoValue > 0) totalNetWorth += convertCurrency(totalCryptoValue, "USD", mainCurrency, rateMap);
+    if (stockValue > 0) netWorth += convertCurrency(stockValue, stockCurrency, mainCurrency, rateMap);
+    if (totalCryptoValue > 0) netWorth += convertCurrency(totalCryptoValue, "USD", mainCurrency, rateMap);
+    return netWorth;
+  }, [accounts, mainCurrency, rateMap, stockValue, stockCurrency, totalCryptoValue]);
 
   async function handleAddCrypto() {
     if (!user || !cryptoQty || !cryptoBuyPrice) { toast.error("请填写完整"); return; }
@@ -134,7 +150,11 @@ export function AssetOverview() {
 
   async function handleDeleteCrypto(id: string) {
     if (!confirm("删除这个持仓？")) return;
-    await supabase.from("crypto_holdings").delete().eq("id", id);
+    const { error } = await supabase.from("crypto_holdings").delete().eq("id", id);
+    if (error) {
+      toast.error("删除失败");
+      return;
+    }
     setCryptoHoldings((prev) => prev.filter((h) => h.id !== id));
   }
 

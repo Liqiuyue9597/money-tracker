@@ -6,6 +6,7 @@ import { supabase, type Currency, CURRENCIES, formatMoney } from "@/lib/supabase
 import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronRight,
@@ -60,100 +61,106 @@ export function AnnualReport() {
     if (!user) return;
     setLoading(true);
 
-    const startDate = `${year}-01-01`;
-    const endDate = `${year}-12-31`;
+    try {
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
 
-    const { data: transactions } = await supabase
-      .from("transactions")
-      .select("*, categories(name, icon), accounts(name, icon)")
-      .eq("user_id", user.id)
-      .gte("date", startDate)
-      .lte("date", endDate)
-      .order("date", { ascending: true });
+      const { data: transactions, error } = await supabase
+        .from("transactions")
+        .select("*, categories(name, icon), accounts(name, icon)")
+        .eq("user_id", user.id)
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true });
 
-    if (!transactions || transactions.length === 0) {
-      setTotalExpense(0);
-      setTotalIncome(0);
-      setMonthlyData([]);
-      setTopExpenseCategories([]);
-      setTopIncomeCategories([]);
-      setTopAccounts([]);
-      setTransactionCount(0);
-      setMaxExpenseMonth(null);
-      setMaxIncomeMonth(null);
-      setAvgMonthlyExpense(0);
+      if (error) throw error;
+
+      if (!transactions || transactions.length === 0) {
+        setTotalExpense(0);
+        setTotalIncome(0);
+        setMonthlyData([]);
+        setTopExpenseCategories([]);
+        setTopIncomeCategories([]);
+        setTopAccounts([]);
+        setTransactionCount(0);
+        setMaxExpenseMonth(null);
+        setMaxIncomeMonth(null);
+        setAvgMonthlyExpense(0);
+        return;
+      }
+
+      setTransactionCount(transactions.length);
+
+      // Calculate totals
+      let exp = 0, inc = 0;
+      const monthMap: Record<string, { expense: number; income: number }> = {};
+      const expCatMap: Record<string, CategoryData> = {};
+      const incCatMap: Record<string, CategoryData> = {};
+      const accMap: Record<string, AccountData> = {};
+
+      for (const t of transactions) {
+        const amt = Number(t.amount);
+        const monthKey = t.date.substring(0, 7); // "2026-01"
+
+        if (!monthMap[monthKey]) monthMap[monthKey] = { expense: 0, income: 0 };
+
+        if (t.type === "expense") {
+          exp += amt;
+          monthMap[monthKey].expense += amt;
+          const catName = t.categories?.name || "其他";
+          const catIcon = t.categories?.icon || "📌";
+          if (!expCatMap[catName]) expCatMap[catName] = { name: catName, icon: catIcon, amount: 0 };
+          expCatMap[catName].amount += amt;
+        } else {
+          inc += amt;
+          monthMap[monthKey].income += amt;
+          const catName = t.categories?.name || "其他";
+          const catIcon = t.categories?.icon || "📌";
+          if (!incCatMap[catName]) incCatMap[catName] = { name: catName, icon: catIcon, amount: 0 };
+          incCatMap[catName].amount += amt;
+        }
+
+        // Account stats (expense only)
+        if (t.type === "expense" && t.accounts) {
+          const accName = t.accounts.name;
+          const accIcon = t.accounts.icon;
+          if (!accMap[accName]) accMap[accName] = { name: accName, icon: accIcon, amount: 0 };
+          accMap[accName].amount += amt;
+        }
+      }
+
+      setTotalExpense(exp);
+      setTotalIncome(inc);
+
+      // Monthly data (fill all 12 months)
+      const months: MonthData[] = [];
+      for (let m = 1; m <= 12; m++) {
+        const key = `${year}-${String(m).padStart(2, "0")}`;
+        months.push({
+          month: key,
+          expense: monthMap[key]?.expense || 0,
+          income: monthMap[key]?.income || 0,
+        });
+      }
+      setMonthlyData(months);
+
+      // Max months
+      const monthsWithExp = months.filter((m) => m.expense > 0);
+      const monthsWithInc = months.filter((m) => m.income > 0);
+      setMaxExpenseMonth(monthsWithExp.sort((a, b) => b.expense - a.expense)[0] || null);
+      setMaxIncomeMonth(monthsWithInc.sort((a, b) => b.income - a.income)[0] || null);
+      setAvgMonthlyExpense(monthsWithExp.length > 0 ? exp / monthsWithExp.length : 0);
+
+      // Top categories
+      setTopExpenseCategories(Object.values(expCatMap).sort((a, b) => b.amount - a.amount).slice(0, 8));
+      setTopIncomeCategories(Object.values(incCatMap).sort((a, b) => b.amount - a.amount).slice(0, 5));
+      setTopAccounts(Object.values(accMap).sort((a, b) => b.amount - a.amount).slice(0, 5));
+    } catch (err) {
+      console.error("Failed to load report:", err);
+      toast.error("加载报告失败");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setTransactionCount(transactions.length);
-
-    // Calculate totals
-    let exp = 0, inc = 0;
-    const monthMap: Record<string, { expense: number; income: number }> = {};
-    const expCatMap: Record<string, CategoryData> = {};
-    const incCatMap: Record<string, CategoryData> = {};
-    const accMap: Record<string, AccountData> = {};
-
-    for (const t of transactions) {
-      const amt = Number(t.amount);
-      const monthKey = t.date.substring(0, 7); // "2026-01"
-
-      if (!monthMap[monthKey]) monthMap[monthKey] = { expense: 0, income: 0 };
-
-      if (t.type === "expense") {
-        exp += amt;
-        monthMap[monthKey].expense += amt;
-        const catName = t.categories?.name || "其他";
-        const catIcon = t.categories?.icon || "📌";
-        if (!expCatMap[catName]) expCatMap[catName] = { name: catName, icon: catIcon, amount: 0 };
-        expCatMap[catName].amount += amt;
-      } else {
-        inc += amt;
-        monthMap[monthKey].income += amt;
-        const catName = t.categories?.name || "其他";
-        const catIcon = t.categories?.icon || "📌";
-        if (!incCatMap[catName]) incCatMap[catName] = { name: catName, icon: catIcon, amount: 0 };
-        incCatMap[catName].amount += amt;
-      }
-
-      // Account stats (expense only)
-      if (t.type === "expense" && t.accounts) {
-        const accName = t.accounts.name;
-        const accIcon = t.accounts.icon;
-        if (!accMap[accName]) accMap[accName] = { name: accName, icon: accIcon, amount: 0 };
-        accMap[accName].amount += amt;
-      }
-    }
-
-    setTotalExpense(exp);
-    setTotalIncome(inc);
-
-    // Monthly data (fill all 12 months)
-    const months: MonthData[] = [];
-    for (let m = 1; m <= 12; m++) {
-      const key = `${year}-${String(m).padStart(2, "0")}`;
-      months.push({
-        month: key,
-        expense: monthMap[key]?.expense || 0,
-        income: monthMap[key]?.income || 0,
-      });
-    }
-    setMonthlyData(months);
-
-    // Max months
-    const monthsWithExp = months.filter((m) => m.expense > 0);
-    const monthsWithInc = months.filter((m) => m.income > 0);
-    setMaxExpenseMonth(monthsWithExp.sort((a, b) => b.expense - a.expense)[0] || null);
-    setMaxIncomeMonth(monthsWithInc.sort((a, b) => b.income - a.income)[0] || null);
-    setAvgMonthlyExpense(monthsWithExp.length > 0 ? exp / monthsWithExp.length : 0);
-
-    // Top categories
-    setTopExpenseCategories(Object.values(expCatMap).sort((a, b) => b.amount - a.amount).slice(0, 8));
-    setTopIncomeCategories(Object.values(incCatMap).sort((a, b) => b.amount - a.amount).slice(0, 5));
-    setTopAccounts(Object.values(accMap).sort((a, b) => b.amount - a.amount).slice(0, 5));
-
-    setLoading(false);
   }
 
   const net = totalIncome - totalExpense;

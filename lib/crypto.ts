@@ -35,7 +35,7 @@ export async function getCryptoPrices(symbols: string[]): Promise<Record<string,
 
   // Map back from CoinGecko IDs to our symbols
   const result: Record<string, CryptoPrice> = {};
-  for (const [symbol] of symbols.map((s) => [s, SYMBOL_TO_ID[s.toUpperCase()] || s.toLowerCase()])) {
+  for (const symbol of symbols) {
     const id = SYMBOL_TO_ID[symbol.toUpperCase()] || symbol.toLowerCase();
     if (data[id]) {
       result[symbol.toUpperCase()] = data[id];

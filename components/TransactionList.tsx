@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import {
   supabase,
@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 interface TransactionWithJoins extends Transaction {
@@ -39,44 +40,65 @@ export function TransactionList() {
   async function loadTransactions() {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("transactions")
-      .select("*, categories(name, icon), accounts(name, icon)")
-      .eq("user_id", user.id)
-      .gte("date", format(monthStart, "yyyy-MM-dd"))
-      .lte("date", format(monthEnd, "yyyy-MM-dd"))
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false });
-    if (data) setTransactions(data);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*, categories(name, icon), accounts(name, icon)")
+        .eq("user_id", user.id)
+        .gte("date", format(monthStart, "yyyy-MM-dd"))
+        .lte("date", format(monthEnd, "yyyy-MM-dd"))
+        .order("date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      if (data) setTransactions(data);
+    } catch (err) {
+      console.error("Failed to load transactions:", err);
+      toast.error("加载账单失败");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const filtered = transactions.filter(
-    (t) =>
-      !search ||
-      t.note?.toLowerCase().includes(search.toLowerCase()) ||
-      t.categories?.name?.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      transactions.filter(
+        (t) =>
+          !search ||
+          t.note?.toLowerCase().includes(search.toLowerCase()) ||
+          t.categories?.name?.toLowerCase().includes(search.toLowerCase())
+      ),
+    [transactions, search]
   );
 
-  const grouped = filtered.reduce<Record<string, TransactionWithJoins[]>>(
-    (acc, t) => {
-      if (!acc[t.date]) acc[t.date] = [];
-      acc[t.date].push(t);
-      return acc;
-    },
-    {}
+  const grouped = useMemo(
+    () =>
+      filtered.reduce<Record<string, TransactionWithJoins[]>>((acc, t) => {
+        if (!acc[t.date]) acc[t.date] = [];
+        acc[t.date].push(t);
+        return acc;
+      }, {}),
+    [filtered]
   );
 
-  const totalExpense = filtered
-    .filter((t) => t.type === "expense")
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const totalIncome = filtered
-    .filter((t) => t.type === "income")
-    .reduce((s, t) => s + Number(t.amount), 0);
+  const totalExpense = useMemo(
+    () => filtered.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0),
+    [filtered]
+  );
+  const totalIncome = useMemo(
+    () => filtered.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0),
+    [filtered]
+  );
 
   async function handleDelete(id: string) {
-    await supabase.from("transactions").delete().eq("id", id);
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    try {
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
+      setTransactions((prev) => prev.filter((t) => t.id !== id));
+      toast.success("已删除");
+    } catch (err) {
+      console.error("Failed to delete transaction:", err);
+      toast.error("删除失败");
+    }
   }
 
   return (
