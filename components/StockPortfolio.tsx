@@ -68,12 +68,16 @@ export function StockPortfolio() {
     setRefreshing(false);
   }, [holdings]);
 
+  const [adding, setAdding] = useState(false);
+
   async function handleAdd() {
     if (!user || !symbol || !buyPrice || !quantity) {
       toast.error("请填写完整信息");
       return;
     }
 
+    setAdding(true);
+    try {
     const { error } = await supabase.from("stock_holdings").insert({
       user_id: user.id,
       symbol: symbol.toUpperCase(),
@@ -94,6 +98,9 @@ export function StockPortfolio() {
       setQuantity("");
       setDialogOpen(false);
       loadHoldings();
+    }
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -175,8 +182,8 @@ export function StockPortfolio() {
                     </button>
                   ))}
                 </div>
-                <Button onClick={handleAdd} className="w-full rounded-xl">
-                  确认添加
+                <Button onClick={handleAdd} disabled={adding} className="w-full rounded-xl">
+                  {adding ? "添加中..." : "确认添加"}
                 </Button>
               </div>
             </DialogContent>

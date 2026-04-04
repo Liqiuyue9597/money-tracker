@@ -40,6 +40,7 @@ export function AssetOverview() {
   const [cryptoSymbol, setCryptoSymbol] = useState("BTC");
   const [cryptoQty, setCryptoQty] = useState("");
   const [cryptoBuyPrice, setCryptoBuyPrice] = useState("");
+  const [addingCrypto, setAddingCrypto] = useState(false);
 
   useEffect(() => {
     if (user) loadData();
@@ -132,6 +133,8 @@ export function AssetOverview() {
 
   async function handleAddCrypto() {
     if (!user || !cryptoQty || !cryptoBuyPrice) { toast.error("请填写完整"); return; }
+    setAddingCrypto(true);
+    try {
     const { error } = await supabase.from("crypto_holdings").insert({
       user_id: user.id,
       symbol: cryptoSymbol,
@@ -145,6 +148,9 @@ export function AssetOverview() {
       setCryptoDialogOpen(false);
       setCryptoQty(""); setCryptoBuyPrice("");
       loadData();
+    }
+    } finally {
+      setAddingCrypto(false);
     }
   }
 
@@ -419,7 +425,7 @@ export function AssetOverview() {
               <Input type="number" placeholder="持有数量" value={cryptoQty} onChange={(e) => setCryptoQty(e.target.value)} step="0.00000001" className="rounded-xl" />
               <Input type="number" placeholder="买入均价 (USD)" value={cryptoBuyPrice} onChange={(e) => setCryptoBuyPrice(e.target.value)} step="0.01" className="rounded-xl" />
             </div>
-            <Button onClick={handleAddCrypto} className="w-full rounded-xl">确认添加</Button>
+            <Button onClick={handleAddCrypto} disabled={addingCrypto} className="w-full rounded-xl">{addingCrypto ? "添加中..." : "确认添加"}</Button>
           </div>
         </DialogContent>
       </Dialog>
