@@ -1,0 +1,1982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoneyTracker UI 设计方案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,300&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    color: #e0e0e0;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 60px 40px 80px;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 72px;
+  }
+  .page-header h1 {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+  .page-header p {
+    font-size: 18px;
+    color: #666;
+    font-weight: 400;
+    letter-spacing: 2px;
+  }
+
+  .style-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 48px;
+    margin-bottom: 80px;
+    max-width: 1500px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .style-label {
+    width: 180px;
+    flex-shrink: 0;
+    padding-top: 40px;
+    position: sticky;
+    top: 60px;
+  }
+  .style-label .style-num {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 10px;
+  }
+  .style-label h2 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+  .style-label .style-en {
+    font-size: 14px;
+    color: #666;
+    font-weight: 400;
+    margin-bottom: 14px;
+  }
+  .style-label .style-desc {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.7;
+  }
+  .style-label .style-tag {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 4px 12px;
+    border: 1px solid #333;
+    border-radius: 20px;
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 1px;
+  }
+
+  .phones-row {
+    display: flex;
+    gap: 32px;
+    flex: 1;
+  }
+
+  .phone-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .phone-col .screen-label {
+    font-size: 12px;
+    color: #555;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  /* Phone frame */
+  .phone-frame {
+    width: 375px;
+    height: 700px;
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 30px 60px rgba(0,0,0,0.5);
+  }
+  .phone-frame::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 28px;
+    background: inherit;
+    border-radius: 0 0 18px 18px;
+    z-index: 100;
+  }
+  .phone-frame::after {
+    content: '';
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 134px;
+    height: 5px;
+    border-radius: 3px;
+    z-index: 100;
+  }
+
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    position: relative;
+  }
+  .phone-screen::-webkit-scrollbar { display: none; }
+
+  /* ===========================
+     STYLE 1: 极简水墨 Ink Minimal
+     =========================== */
+  .ink .phone-frame {
+    background: #FAFAFA;
+  }
+  .ink .phone-frame::before {
+    background: #FAFAFA;
+  }
+  .ink .phone-frame::after {
+    background: #111;
+  }
+
+  .ink .phone-screen {
+    background: #FAFAFA;
+    font-family: 'DM Sans', -apple-system, 'PingFang SC', 'Noto Sans SC', sans-serif;
+    color: #111;
+    padding: 52px 24px 90px;
+  }
+
+  .ink .screen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 32px;
+  }
+  .ink .screen-header h3 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #111;
+  }
+  .ink .screen-header .date {
+    font-size: 13px;
+    color: #999;
+    font-weight: 400;
+  }
+
+  .ink .summary-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .ink .summary-card {
+    flex: 1;
+    border: 1px solid #e0e0e0;
+    padding: 18px 16px;
+  }
+  .ink .summary-card .label {
+    font-size: 11px;
+    color: #999;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .ink .summary-card .amount {
+    font-size: 24px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+  }
+  .ink .summary-card .amount.expense { color: #C75B4A; }
+  .ink .summary-card .amount.income { color: #4A8C6F; }
+
+  .ink .net-card {
+    border: 1px solid #e0e0e0;
+    padding: 16px;
+    margin-bottom: 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ink .net-card .label {
+    font-size: 12px;
+    color: #999;
+  }
+  .ink .net-card .amount {
+    font-size: 20px;
+    font-weight: 700;
+    color: #4A8C6F;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ink .section-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #bbb;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .ink .account-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .ink .account-item:last-child { border-bottom: none; }
+  .ink .account-item .name {
+    font-size: 14px;
+    color: #333;
+  }
+  .ink .account-item .val {
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #111;
+  }
+  .ink .account-item .val.negative { color: #C75B4A; }
+
+  .ink .account-list { margin-bottom: 32px; }
+
+  .ink .ranking-item {
+    margin-bottom: 16px;
+  }
+  .ink .ranking-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #555;
+  }
+  .ink .ranking-top .r-amount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #C75B4A;
+  }
+  .ink .ranking-bar {
+    height: 2px;
+    background: #eee;
+    position: relative;
+  }
+  .ink .ranking-bar-fill {
+    height: 100%;
+    background: #111;
+  }
+
+  /* Ink bottom nav */
+  .ink .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 72px;
+    background: #FAFAFA;
+    border-top: 1px solid #e8e8e8;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px 8px;
+  }
+  .ink .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: #bbb;
+    letter-spacing: 0.5px;
+  }
+  .ink .nav-item.active { color: #111; }
+  .ink .nav-item .nav-icon { font-size: 18px; }
+  .ink .nav-item.center-btn .nav-icon {
+    width: 40px;
+    height: 40px;
+    border: 1.5px solid #111;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #111;
+    margin-bottom: -2px;
+  }
+
+  /* Ink Quick Entry */
+  .ink .toggle-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 28px;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  .ink .toggle-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    color: #bbb;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+  }
+  .ink .toggle-btn.active {
+    color: #111;
+    border-bottom-color: #111;
+    font-weight: 600;
+  }
+  .ink .toggle-currency {
+    margin-left: auto;
+    font-size: 12px;
+    color: #999;
+    align-self: center;
+    padding-bottom: 10px;
+  }
+
+  .ink .account-pills {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+  .ink .pill {
+    padding: 8px 16px;
+    font-size: 13px;
+    border: 1px solid #e0e0e0;
+    color: #777;
+  }
+  .ink .pill.active {
+    border-color: #111;
+    color: #111;
+    font-weight: 500;
+  }
+
+  .ink .entry-amount {
+    text-align: center;
+    margin-bottom: 32px;
+    padding: 8px 0;
+  }
+  .ink .entry-amount .currency {
+    font-size: 18px;
+    color: #bbb;
+    font-weight: 300;
+    margin-right: 4px;
+  }
+  .ink .entry-amount .num {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    font-variant-numeric: tabular-nums;
+    color: #111;
+  }
+
+  .ink .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin-bottom: 24px;
+  }
+  .ink .cat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 4px;
+    gap: 6px;
+    font-size: 11px;
+    color: #999;
+  }
+  .ink .cat-item .cat-icon {
+    font-size: 22px;
+  }
+  .ink .cat-item.active {
+    color: #111;
+    position: relative;
+  }
+  .ink .cat-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    width: 16px;
+    height: 1.5px;
+    background: #111;
+  }
+
+  .ink .note-input {
+    border-bottom: 1px solid #e0e0e0;
+    padding: 12px 0;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #bbb;
+    font-style: italic;
+  }
+
+  .ink .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr) 72px;
+    gap: 1px;
+    background: #eee;
+    border: 1px solid #eee;
+  }
+  .ink .key {
+    background: #FAFAFA;
+    text-align: center;
+    padding: 14px;
+    font-size: 18px;
+    font-weight: 500;
+    color: #333;
+    font-variant-numeric: tabular-nums;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .ink .key.save-btn {
+    background: #111;
+    color: #FAFAFA;
+    grid-row: span 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    letter-spacing: 2px;
+    writing-mode: vertical-rl;
+  }
+
+  /* Ink Assets */
+  .ink .assets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+  .ink .assets-header h3 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #111;
+  }
+  .ink .add-btn {
+    font-size: 12px;
+    color: #999;
+    border: 1px solid #ddd;
+    padding: 6px 14px;
+  }
+
+  .ink .total-section {
+    margin-bottom: 36px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+  }
+  .ink .total-label {
+    font-size: 11px;
+    color: #bbb;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .ink .total-amount {
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    font-variant-numeric: tabular-nums;
+    color: #111;
+    margin-bottom: 12px;
+  }
+  .ink .currency-breakdown {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #999;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ink .asset-section { margin-bottom: 28px; }
+  .ink .asset-section-title {
+    font-size: 11px;
+    color: #bbb;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+  .ink .asset-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .ink .asset-item .a-name {
+    font-size: 14px;
+    color: #333;
+  }
+  .ink .asset-item .a-val {
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .ink .asset-item .a-sub {
+    font-size: 11px;
+    color: #4A8C6F;
+    text-align: right;
+    margin-top: 2px;
+  }
+  .ink .asset-item .a-sub.warn { color: #C75B4A; }
+
+  /* ===========================
+     STYLE 2: 柔和圆润 Soft & Rounded
+     =========================== */
+  .soft .phone-frame {
+    background: #FDF8F3;
+  }
+  .soft .phone-frame::before {
+    background: #FDF8F3;
+  }
+  .soft .phone-frame::after {
+    background: #d4c5b5;
+  }
+
+  .soft .phone-screen {
+    background: #FDF8F3;
+    font-family: 'Nunito', -apple-system, 'PingFang SC', sans-serif;
+    color: #3D3530;
+    padding: 52px 20px 90px;
+  }
+
+  .soft .screen-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .soft .screen-header h3 {
+    font-size: 22px;
+    font-weight: 800;
+    color: #3D3530;
+  }
+  .soft .screen-header .date {
+    font-size: 13px;
+    color: #B5A99A;
+    font-weight: 600;
+  }
+
+  .soft .summary-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .soft .summary-card {
+    flex: 1;
+    border-radius: 24px;
+    padding: 18px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .soft .summary-card.expense-card {
+    background: linear-gradient(135deg, #FFF0EE 0%, #FFE0DB 100%);
+  }
+  .soft .summary-card.income-card {
+    background: linear-gradient(135deg, #E8F8EF 0%, #D2F0E0 100%);
+  }
+  .soft .summary-card .label {
+    font-size: 12px;
+    color: #A09080;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .soft .summary-card .amount {
+    font-size: 22px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .soft .summary-card.expense-card .amount { color: #E86B5A; }
+  .soft .summary-card.income-card .amount { color: #3DAA6F; }
+
+  .soft .net-card {
+    background: linear-gradient(135deg, #E8EEF8 0%, #DDE6F5 100%);
+    border-radius: 24px;
+    padding: 16px 18px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .soft .net-card .label {
+    font-size: 13px;
+    color: #8090A0;
+    font-weight: 600;
+  }
+  .soft .net-card .amount {
+    font-size: 20px;
+    font-weight: 800;
+    color: #5080C0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .soft .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #8A7E72;
+    margin-bottom: 12px;
+    margin-top: 4px;
+  }
+
+  .soft .account-list { margin-bottom: 24px; }
+  .soft .account-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: #fff;
+    border-radius: 18px;
+    margin-bottom: 8px;
+    box-shadow: 0 2px 12px rgba(180,160,140,0.08);
+  }
+  .soft .account-item .name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #5A4E44;
+  }
+  .soft .account-item .val {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #3D3530;
+  }
+  .soft .account-item .val.negative { color: #E86B5A; }
+
+  .soft .ranking-item {
+    margin-bottom: 14px;
+  }
+  .soft .ranking-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6A5E54;
+  }
+  .soft .ranking-top .r-amount {
+    color: #E86B5A;
+    font-variant-numeric: tabular-nums;
+  }
+  .soft .ranking-bar {
+    height: 8px;
+    background: #F0E8E0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .soft .ranking-bar-fill {
+    height: 100%;
+    border-radius: 8px;
+  }
+  .soft .ranking-item:nth-child(1) .ranking-bar-fill { background: linear-gradient(90deg, #FF8B7E, #FFB4AB); }
+  .soft .ranking-item:nth-child(2) .ranking-bar-fill { background: linear-gradient(90deg, #7ED4AD, #A8E6C8); }
+  .soft .ranking-item:nth-child(3) .ranking-bar-fill { background: linear-gradient(90deg, #7EB4D4, #A8D0E8); }
+
+  /* Soft bottom nav */
+  .soft .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 76px;
+    background: #fff;
+    border-top: none;
+    box-shadow: 0 -4px 20px rgba(160,140,120,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px 8px;
+    border-radius: 24px 24px 0 0;
+  }
+  .soft .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: #C0B0A0;
+    font-weight: 700;
+  }
+  .soft .nav-item.active { color: #FF8B7E; }
+  .soft .nav-item .nav-icon { font-size: 20px; }
+  .soft .nav-item.center-btn .nav-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #FF8B7E, #FF6B5E);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #fff;
+    margin-top: -16px;
+    box-shadow: 0 4px 16px rgba(255,107,94,0.3);
+  }
+
+  /* Soft Quick Entry */
+  .soft .toggle-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    background: #F0E8E0;
+    border-radius: 16px;
+    padding: 4px;
+    position: relative;
+  }
+  .soft .toggle-btn {
+    flex: 1;
+    padding: 10px 16px;
+    font-size: 14px;
+    color: #A09080;
+    border-radius: 12px;
+    text-align: center;
+    font-weight: 700;
+    z-index: 1;
+  }
+  .soft .toggle-btn.active {
+    background: #fff;
+    color: #3D3530;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .soft .toggle-currency {
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #B5A99A;
+    font-weight: 700;
+    z-index: 1;
+  }
+
+  .soft .account-pills {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .soft .pill {
+    padding: 10px 18px;
+    font-size: 13px;
+    background: #fff;
+    border-radius: 50px;
+    color: #A09080;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .soft .pill.active {
+    background: linear-gradient(135deg, #FF8B7E, #FF6B5E);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(255,107,94,0.25);
+  }
+
+  .soft .entry-amount {
+    text-align: center;
+    margin-bottom: 24px;
+    padding: 16px 0;
+    background: #fff;
+    border-radius: 24px;
+    box-shadow: 0 2px 16px rgba(180,160,140,0.08);
+  }
+  .soft .entry-amount .currency {
+    font-size: 20px;
+    color: #C0B0A0;
+    font-weight: 600;
+  }
+  .soft .entry-amount .num {
+    font-size: 44px;
+    font-weight: 800;
+    color: #3D3530;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .soft .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .soft .cat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 4px;
+    gap: 6px;
+    font-size: 11px;
+    color: #A09080;
+    font-weight: 600;
+  }
+  .soft .cat-item .cat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    background: #F5EDE5;
+  }
+  .soft .cat-item:nth-child(1) .cat-icon { background: #FFE0DB; }
+  .soft .cat-item:nth-child(2) .cat-icon { background: #D2F0E0; }
+  .soft .cat-item:nth-child(3) .cat-icon { background: #DDE6F5; }
+  .soft .cat-item:nth-child(4) .cat-icon { background: #FFF0DB; }
+  .soft .cat-item:nth-child(5) .cat-icon { background: #E8DBF5; }
+  .soft .cat-item:nth-child(6) .cat-icon { background: #FFE0DB; }
+  .soft .cat-item:nth-child(7) .cat-icon { background: #D2F0E0; }
+  .soft .cat-item:nth-child(8) .cat-icon { background: #DDE6F5; }
+  .soft .cat-item:nth-child(9) .cat-icon { background: #FFF0DB; }
+  .soft .cat-item:nth-child(10) .cat-icon { background: #E8DBF5; }
+  .soft .cat-item:nth-child(11) .cat-icon { background: #FFE0DB; }
+  .soft .cat-item:nth-child(12) .cat-icon { background: #D2F0E0; }
+  .soft .cat-item.active .cat-icon {
+    box-shadow: 0 0 0 3px #FF8B7E;
+  }
+  .soft .cat-item.active {
+    color: #3D3530;
+  }
+
+  .soft .note-input {
+    background: #fff;
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: #C0B0A0;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+
+  .soft .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr) 72px;
+    gap: 8px;
+  }
+  .soft .key {
+    background: #fff;
+    text-align: center;
+    padding: 14px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #3D3530;
+    border-radius: 16px;
+    font-variant-numeric: tabular-nums;
+    font-family: 'Nunito', sans-serif;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+  .soft .key.save-btn {
+    background: linear-gradient(135deg, #FF8B7E, #FF6B5E);
+    color: #fff;
+    grid-row: span 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+    writing-mode: vertical-rl;
+    border-radius: 20px;
+    box-shadow: 0 4px 16px rgba(255,107,94,0.3);
+  }
+
+  /* Soft Assets */
+  .soft .assets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .soft .assets-header h3 {
+    font-size: 22px;
+    font-weight: 800;
+    color: #3D3530;
+  }
+  .soft .add-btn {
+    font-size: 12px;
+    color: #fff;
+    background: linear-gradient(135deg, #7EB4D4, #5A9EC8);
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(126,180,212,0.3);
+  }
+
+  .soft .total-section {
+    background: linear-gradient(135deg, #FFF8F0, #FFE8D8);
+    border-radius: 28px;
+    padding: 24px 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .soft .total-label {
+    font-size: 12px;
+    color: #B5A99A;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .soft .total-amount {
+    font-size: 36px;
+    font-weight: 800;
+    color: #3D3530;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 12px;
+  }
+  .soft .currency-breakdown {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    font-size: 11px;
+    color: #B5A99A;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .soft .currency-breakdown span {
+    background: rgba(255,255,255,0.6);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  .soft .asset-section { margin-bottom: 20px; }
+  .soft .asset-section-title {
+    font-size: 13px;
+    color: #B5A99A;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .soft .asset-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: #fff;
+    border-radius: 18px;
+    margin-bottom: 8px;
+    box-shadow: 0 2px 12px rgba(180,160,140,0.06);
+  }
+  .soft .asset-item .a-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #5A4E44;
+  }
+  .soft .asset-item .a-val {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: #3D3530;
+  }
+  .soft .asset-item .a-sub {
+    font-size: 11px;
+    color: #3DAA6F;
+    text-align: right;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .soft .asset-item .a-sub.warn {
+    color: #E86B5A;
+  }
+
+  /* ===========================
+     STYLE 3: 深色专业 Dark Professional
+     =========================== */
+  .dark .phone-frame {
+    background: #111111;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 30px 60px rgba(0,0,0,0.6);
+  }
+  .dark .phone-frame::before {
+    background: #111111;
+  }
+  .dark .phone-frame::after {
+    background: #444;
+  }
+
+  .dark .phone-screen {
+    background: #111111;
+    font-family: 'Inter', -apple-system, 'PingFang SC', sans-serif;
+    color: #E8E8E8;
+    padding: 52px 16px 86px;
+  }
+
+  .dark .screen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .dark .screen-header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .dark .screen-header .date {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .dark .summary-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .dark .summary-card {
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 14px;
+  }
+  .dark .summary-card .label {
+    font-size: 11px;
+    color: #666;
+    font-weight: 500;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+  .dark .summary-card .amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .dark .summary-card .amount.expense {
+    color: #F87171;
+    text-shadow: 0 0 20px rgba(248,113,113,0.3);
+  }
+  .dark .summary-card .amount.income {
+    color: #34D399;
+    text-shadow: 0 0 20px rgba(52,211,153,0.3);
+  }
+
+  .dark .net-card {
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .dark .net-card .label {
+    font-size: 12px;
+    color: #666;
+  }
+  .dark .net-card .amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #34D399;
+    text-shadow: 0 0 20px rgba(52,211,153,0.2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dark .section-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .dark .account-list { margin-bottom: 18px; }
+  .dark .account-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    margin-bottom: 6px;
+  }
+  .dark .account-item .name {
+    font-size: 13px;
+    color: #aaa;
+    font-weight: 500;
+  }
+  .dark .account-item .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #E8E8E8;
+  }
+  .dark .account-item .val.negative {
+    color: #F87171;
+  }
+
+  .dark .ranking-item { margin-bottom: 12px; }
+  .dark .ranking-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+  }
+  .dark .ranking-top .r-amount {
+    font-family: 'JetBrains Mono', monospace;
+    color: #F87171;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .dark .ranking-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .dark .ranking-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: #4A9EFF;
+  }
+  .dark .ranking-item:nth-child(2) .ranking-bar-fill { background: #34D399; }
+  .dark .ranking-item:nth-child(3) .ranking-bar-fill { background: #A78BFA; }
+
+  /* Dark bottom nav */
+  .dark .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 72px;
+    background: #151515;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px 8px;
+  }
+  .dark .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: #555;
+    font-weight: 500;
+  }
+  .dark .nav-item.active { color: #4A9EFF; }
+  .dark .nav-item .nav-icon { font-size: 18px; }
+  .dark .nav-item.center-btn .nav-icon {
+    width: 42px;
+    height: 42px;
+    background: #4A9EFF;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #fff;
+    box-shadow: 0 0 20px rgba(74,158,255,0.3);
+    margin-bottom: 0;
+  }
+
+  /* Dark Quick Entry */
+  .dark .toggle-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    background: #1A1A1A;
+    border-radius: 10px;
+    padding: 3px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .dark .toggle-btn {
+    flex: 1;
+    padding: 9px 14px;
+    font-size: 13px;
+    color: #666;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 600;
+  }
+  .dark .toggle-btn.active {
+    background: #4A9EFF;
+    color: #fff;
+    box-shadow: 0 0 16px rgba(74,158,255,0.3);
+  }
+  .dark .toggle-currency {
+    padding: 9px 12px;
+    font-size: 11px;
+    color: #555;
+    font-weight: 600;
+  }
+
+  .dark .account-pills {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .dark .pill {
+    padding: 8px 14px;
+    font-size: 12px;
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    color: #666;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .dark .pill.active {
+    border-color: #4A9EFF;
+    color: #4A9EFF;
+    background: rgba(74,158,255,0.08);
+  }
+
+  .dark .entry-amount {
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 20px 0;
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+  }
+  .dark .entry-amount .currency {
+    font-size: 16px;
+    color: #555;
+    font-weight: 500;
+  }
+  .dark .entry-amount .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 42px;
+    font-weight: 700;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 30px rgba(255,255,255,0.1);
+  }
+
+  .dark .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .dark .cat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 4px;
+    gap: 5px;
+    font-size: 10px;
+    color: #666;
+    font-weight: 500;
+    border-radius: 12px;
+  }
+  .dark .cat-item .cat-icon {
+    font-size: 20px;
+  }
+  .dark .cat-item.active {
+    background: rgba(74,158,255,0.1);
+    color: #4A9EFF;
+  }
+
+  .dark .note-input {
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+  }
+
+  .dark .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr) 64px;
+    gap: 6px;
+  }
+  .dark .key {
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.04);
+    text-align: center;
+    padding: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ccc;
+    border-radius: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .dark .key.save-btn {
+    background: #4A9EFF;
+    border: none;
+    color: #fff;
+    grid-row: span 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    writing-mode: vertical-rl;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(74,158,255,0.25);
+  }
+
+  /* Dark Assets */
+  .dark .assets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .dark .assets-header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .dark .add-btn {
+    font-size: 11px;
+    color: #4A9EFF;
+    border: 1px solid rgba(74,158,255,0.3);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+
+  .dark .total-section {
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 20px 16px;
+    margin-bottom: 20px;
+  }
+  .dark .total-label {
+    font-size: 11px;
+    color: #555;
+    font-weight: 600;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .dark .total-amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 34px;
+    font-weight: 700;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 30px rgba(255,255,255,0.1);
+    margin-bottom: 12px;
+  }
+  .dark .currency-breakdown {
+    display: flex;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+  }
+  .dark .currency-breakdown span {
+    background: rgba(255,255,255,0.04);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+
+  .dark .asset-section { margin-bottom: 18px; }
+  .dark .asset-section-title {
+    font-size: 11px;
+    color: #555;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .dark .asset-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: #1A1A1A;
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    margin-bottom: 6px;
+  }
+  .dark .asset-item .a-name {
+    font-size: 13px;
+    color: #aaa;
+    font-weight: 500;
+  }
+  .dark .asset-item .a-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #E8E8E8;
+    text-align: right;
+  }
+  .dark .asset-item .a-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #34D399;
+    text-align: right;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .dark .asset-item .a-sub.warn {
+    color: #F87171;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>MoneyTracker UI 设计方案</h1>
+  <p>3 种风格 · 选择你喜欢的</p>
+</div>
+
+<!-- ==============================
+     ROW 1: 极简水墨 Ink Minimal
+     ============================== -->
+<div class="style-row">
+  <div class="style-label">
+    <div class="style-num">Style 01</div>
+    <h2>极简水墨</h2>
+    <div class="style-en">Ink Minimal</div>
+    <div class="style-desc">受无印良品与日式帐簿启发，以留白与排版为核心。无多余装饰，用极简线条与大字号数字传递信息。</div>
+    <div class="style-tag">MUJI × LEDGER</div>
+  </div>
+  <div class="phones-row">
+
+    <!-- INK: Dashboard -->
+    <div class="phone-col">
+      <div class="screen-label">Dashboard 概览</div>
+      <div class="ink">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="screen-header">
+              <h3>概览</h3>
+              <span class="date">2026年4月</span>
+            </div>
+            <div class="summary-row">
+              <div class="summary-card">
+                <div class="label">本月支出</div>
+                <div class="amount expense">¥8,420</div>
+              </div>
+              <div class="summary-card">
+                <div class="label">本月收入</div>
+                <div class="amount income">¥25,000</div>
+              </div>
+            </div>
+            <div class="net-card">
+              <span class="label">净收入</span>
+              <span class="amount">+¥16,580</span>
+            </div>
+            <div class="section-title">我的账户</div>
+            <div class="account-list">
+              <div class="account-item"><span class="name">💵 现金</span><span class="val">¥2,350</span></div>
+              <div class="account-item"><span class="name">🏦 储蓄卡</span><span class="val">¥45,200</span></div>
+              <div class="account-item"><span class="name">💳 信用卡</span><span class="val negative">-¥3,200</span></div>
+            </div>
+            <div class="section-title">支出排行</div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🍜 餐饮</span><span class="r-amount">¥3,200</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:75%"></div></div>
+            </div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🚗 交通</span><span class="r-amount">¥1,800</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:42%"></div></div>
+            </div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🛍️ 购物</span><span class="r-amount">¥1,520</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:36%"></div></div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item active"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn"><span class="nav-icon">+</span></div>
+              <div class="nav-item"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INK: Quick Entry -->
+    <div class="phone-col">
+      <div class="screen-label">Quick Entry 记账</div>
+      <div class="ink">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="screen-header">
+              <h3>记账</h3>
+              <span class="date"></span>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-btn active">支出</div>
+              <div class="toggle-btn">收入</div>
+              <div class="toggle-currency">CNY ↕</div>
+            </div>
+            <div class="account-pills">
+              <div class="pill active">💵 现金</div>
+              <div class="pill">🏦 储蓄卡</div>
+              <div class="pill">💳 信用卡</div>
+            </div>
+            <div class="entry-amount">
+              <span class="currency">¥</span><span class="num">128.50</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item active"><span class="cat-icon">🍜</span><span>餐饮</span></div>
+              <div class="cat-item"><span class="cat-icon">🚗</span><span>交通</span></div>
+              <div class="cat-item"><span class="cat-icon">🛍️</span><span>购物</span></div>
+              <div class="cat-item"><span class="cat-icon">🏠</span><span>日用</span></div>
+              <div class="cat-item"><span class="cat-icon">🎮</span><span>娱乐</span></div>
+              <div class="cat-item"><span class="cat-icon">💊</span><span>医疗</span></div>
+              <div class="cat-item"><span class="cat-icon">📚</span><span>教育</span></div>
+              <div class="cat-item"><span class="cat-icon">📱</span><span>通讯</span></div>
+              <div class="cat-item"><span class="cat-icon">👔</span><span>服饰</span></div>
+              <div class="cat-item"><span class="cat-icon">✈️</span><span>旅行</span></div>
+              <div class="cat-item"><span class="cat-icon">🎉</span><span>社交</span></div>
+              <div class="cat-item"><span class="cat-icon">📌</span><span>其他</span></div>
+            </div>
+            <div class="note-input">添加备注...</div>
+            <div class="keypad">
+              <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+              <div class="key save-btn">保存</div>
+              <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+              <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+              <div class="key">.</div><div class="key">0</div><div class="key">⌫</div><div class="key" style="background:#f0f0f0">完成</div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn active"><span class="nav-icon">+</span></div>
+              <div class="nav-item"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INK: Assets -->
+    <div class="phone-col">
+      <div class="screen-label">Assets 资产</div>
+      <div class="ink">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="assets-header">
+              <h3>我的资产</h3>
+              <div class="add-btn">+ 添加账户</div>
+            </div>
+            <div class="total-section">
+              <div class="total-label">TOTAL ASSETS</div>
+              <div class="total-amount">¥125,830</div>
+              <div class="currency-breakdown">
+                <span>CNY ¥44,350</span>
+                <span>USD $8,200</span>
+                <span>HKD HK$3,500</span>
+              </div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">现金 & 储蓄</div>
+              <div class="asset-item"><span class="a-name">💵 现金</span><div><div class="a-val">¥2,350</div></div></div>
+              <div class="asset-item"><span class="a-name">🏦 招商储蓄卡</span><div><div class="a-val">¥42,000</div></div></div>
+              <div class="asset-item"><span class="a-name">🏦 Chase</span><div><div class="a-val">$3,200</div></div></div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">信用卡</div>
+              <div class="asset-item">
+                <span class="a-name">💳 招商信用卡</span>
+                <div><div class="a-val" style="color:#C75B4A">-¥3,200</div><div class="a-sub warn">待还</div></div>
+              </div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">投资</div>
+              <div class="asset-item">
+                <span class="a-name">📈 股票组合</span>
+                <div><div class="a-val">$12,500</div><div class="a-sub">+$1,200 +10.6%</div></div>
+              </div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn"><span class="nav-icon">+</span></div>
+              <div class="nav-item active"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==============================
+     ROW 2: 柔和圆润 Soft & Rounded
+     ============================== -->
+<div class="style-row">
+  <div class="style-label">
+    <div class="style-num">Style 02</div>
+    <h2>柔和圆润</h2>
+    <div class="style-en">Soft & Rounded</div>
+    <div class="style-desc">温暖的奶油色基底搭配柔和粉彩，圆润的卡片与胶囊按钮营造友好亲和感。精致但不幼稚。</div>
+    <div class="style-tag">NOTION × BANKING</div>
+  </div>
+  <div class="phones-row">
+
+    <!-- SOFT: Dashboard -->
+    <div class="phone-col">
+      <div class="screen-label">Dashboard 概览</div>
+      <div class="soft">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="screen-header">
+              <h3>概览</h3>
+              <div class="date">2026年4月</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-card expense-card">
+                <div class="label">本月支出</div>
+                <div class="amount">¥8,420</div>
+              </div>
+              <div class="summary-card income-card">
+                <div class="label">本月收入</div>
+                <div class="amount">¥25,000</div>
+              </div>
+            </div>
+            <div class="net-card">
+              <span class="label">净收入</span>
+              <span class="amount">+¥16,580</span>
+            </div>
+            <div class="section-title">我的账户</div>
+            <div class="account-list">
+              <div class="account-item"><span class="name">💵 现金</span><span class="val">¥2,350</span></div>
+              <div class="account-item"><span class="name">🏦 储蓄卡</span><span class="val">¥45,200</span></div>
+              <div class="account-item"><span class="name">💳 信用卡</span><span class="val negative">-¥3,200</span></div>
+            </div>
+            <div class="section-title">支出排行</div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🍜 餐饮</span><span class="r-amount">¥3,200</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:75%"></div></div>
+            </div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🚗 交通</span><span class="r-amount">¥1,800</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:42%"></div></div>
+            </div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🛍️ 购物</span><span class="r-amount">¥1,520</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:36%"></div></div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item active"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn"><span class="nav-icon">+</span></div>
+              <div class="nav-item"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOFT: Quick Entry -->
+    <div class="phone-col">
+      <div class="screen-label">Quick Entry 记账</div>
+      <div class="soft">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="screen-header">
+              <h3>快捷记账</h3>
+              <div class="date"></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-btn active">支出</div>
+              <div class="toggle-btn">收入</div>
+              <div class="toggle-currency">CNY ↕</div>
+            </div>
+            <div class="account-pills">
+              <div class="pill active">💵 现金</div>
+              <div class="pill">🏦 储蓄卡</div>
+              <div class="pill">💳 信用卡</div>
+            </div>
+            <div class="entry-amount">
+              <span class="currency">¥</span><span class="num">128.50</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item active"><div class="cat-icon">🍜</div><span>餐饮</span></div>
+              <div class="cat-item"><div class="cat-icon">🚗</div><span>交通</span></div>
+              <div class="cat-item"><div class="cat-icon">🛍️</div><span>购物</span></div>
+              <div class="cat-item"><div class="cat-icon">🏠</div><span>日用</span></div>
+              <div class="cat-item"><div class="cat-icon">🎮</div><span>娱乐</span></div>
+              <div class="cat-item"><div class="cat-icon">💊</div><span>医疗</span></div>
+              <div class="cat-item"><div class="cat-icon">📚</div><span>教育</span></div>
+              <div class="cat-item"><div class="cat-icon">📱</div><span>通讯</span></div>
+              <div class="cat-item"><div class="cat-icon">👔</div><span>服饰</span></div>
+              <div class="cat-item"><div class="cat-icon">✈️</div><span>旅行</span></div>
+              <div class="cat-item"><div class="cat-icon">🎉</div><span>社交</span></div>
+              <div class="cat-item"><div class="cat-icon">📌</div><span>其他</span></div>
+            </div>
+            <div class="note-input">✏️ 添加备注...</div>
+            <div class="keypad">
+              <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+              <div class="key save-btn">保存</div>
+              <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+              <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+              <div class="key">.</div><div class="key">0</div><div class="key">⌫</div><div class="key" style="background:#F0E8E0;border-radius:16px">完成</div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn active"><span class="nav-icon">+</span></div>
+              <div class="nav-item"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOFT: Assets -->
+    <div class="phone-col">
+      <div class="screen-label">Assets 资产</div>
+      <div class="soft">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="assets-header">
+              <h3>我的资产</h3>
+              <div class="add-btn">+ 添加账户</div>
+            </div>
+            <div class="total-section">
+              <div class="total-label">总资产</div>
+              <div class="total-amount">¥125,830</div>
+              <div class="currency-breakdown">
+                <span>CNY ¥44,350</span>
+                <span>USD $8,200</span>
+                <span>HKD HK$3,500</span>
+              </div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">💰 现金 & 储蓄</div>
+              <div class="asset-item"><span class="a-name">💵 现金</span><div><div class="a-val">¥2,350</div></div></div>
+              <div class="asset-item"><span class="a-name">🏦 招商储蓄卡</span><div><div class="a-val">¥42,000</div></div></div>
+              <div class="asset-item"><span class="a-name">🏦 Chase</span><div><div class="a-val">$3,200</div></div></div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">💳 信用卡</div>
+              <div class="asset-item">
+                <span class="a-name">💳 招商信用卡</span>
+                <div><div class="a-val" style="color:#E86B5A">-¥3,200</div><div class="a-sub warn">待还</div></div>
+              </div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">📈 投资</div>
+              <div class="asset-item">
+                <span class="a-name">📈 股票组合</span>
+                <div><div class="a-val">$12,500</div><div class="a-sub">+$1,200 +10.6%</div></div>
+              </div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn"><span class="nav-icon">+</span></div>
+              <div class="nav-item active"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==============================
+     ROW 3: 深色专业 Dark Professional
+     ============================== -->
+<div class="style-row">
+  <div class="style-label">
+    <div class="style-num">Style 03</div>
+    <h2>深色专业</h2>
+    <div class="style-en">Dark Professional</div>
+    <div class="style-desc">深色背景配合数据密度布局，电蓝色交互高亮与微光效果。面向专业用户的高信息密度界面。</div>
+    <div class="style-tag">BLOOMBERG × APPLE</div>
+  </div>
+  <div class="phones-row">
+
+    <!-- DARK: Dashboard -->
+    <div class="phone-col">
+      <div class="screen-label">Dashboard 概览</div>
+      <div class="dark">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="screen-header">
+              <h3>概览</h3>
+              <span class="date">2026年4月</span>
+            </div>
+            <div class="summary-row">
+              <div class="summary-card">
+                <div class="label">本月支出</div>
+                <div class="amount expense">¥8,420</div>
+              </div>
+              <div class="summary-card">
+                <div class="label">本月收入</div>
+                <div class="amount income">¥25,000</div>
+              </div>
+            </div>
+            <div class="net-card">
+              <span class="label">净收入</span>
+              <span class="amount">+¥16,580</span>
+            </div>
+            <div class="section-title">我的账户</div>
+            <div class="account-list">
+              <div class="account-item"><span class="name">💵 现金</span><span class="val">¥2,350</span></div>
+              <div class="account-item"><span class="name">🏦 储蓄卡</span><span class="val">¥45,200</span></div>
+              <div class="account-item"><span class="name">💳 信用卡</span><span class="val negative">-¥3,200</span></div>
+            </div>
+            <div class="section-title">支出排行</div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🍜 餐饮</span><span class="r-amount">¥3,200</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:75%"></div></div>
+            </div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🚗 交通</span><span class="r-amount">¥1,800</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:42%"></div></div>
+            </div>
+            <div class="ranking-item">
+              <div class="ranking-top"><span>🛍️ 购物</span><span class="r-amount">¥1,520</span></div>
+              <div class="ranking-bar"><div class="ranking-bar-fill" style="width:36%"></div></div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item active"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn"><span class="nav-icon">+</span></div>
+              <div class="nav-item"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DARK: Quick Entry -->
+    <div class="phone-col">
+      <div class="screen-label">Quick Entry 记账</div>
+      <div class="dark">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="screen-header">
+              <h3>记账</h3>
+              <span class="date"></span>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-btn active">支出</div>
+              <div class="toggle-btn">收入</div>
+              <div class="toggle-currency">CNY ↕</div>
+            </div>
+            <div class="account-pills">
+              <div class="pill active">💵 现金</div>
+              <div class="pill">🏦 储蓄卡</div>
+              <div class="pill">💳 信用卡</div>
+            </div>
+            <div class="entry-amount">
+              <span class="currency">¥</span><span class="num">128.50</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item active"><span class="cat-icon">🍜</span><span>餐饮</span></div>
+              <div class="cat-item"><span class="cat-icon">🚗</span><span>交通</span></div>
+              <div class="cat-item"><span class="cat-icon">🛍️</span><span>购物</span></div>
+              <div class="cat-item"><span class="cat-icon">🏠</span><span>日用</span></div>
+              <div class="cat-item"><span class="cat-icon">🎮</span><span>娱乐</span></div>
+              <div class="cat-item"><span class="cat-icon">💊</span><span>医疗</span></div>
+              <div class="cat-item"><span class="cat-icon">📚</span><span>教育</span></div>
+              <div class="cat-item"><span class="cat-icon">📱</span><span>通讯</span></div>
+              <div class="cat-item"><span class="cat-icon">👔</span><span>服饰</span></div>
+              <div class="cat-item"><span class="cat-icon">✈️</span><span>旅行</span></div>
+              <div class="cat-item"><span class="cat-icon">🎉</span><span>社交</span></div>
+              <div class="cat-item"><span class="cat-icon">📌</span><span>其他</span></div>
+            </div>
+            <div class="note-input">添加备注...</div>
+            <div class="keypad">
+              <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+              <div class="key save-btn">保存</div>
+              <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+              <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+              <div class="key">.</div><div class="key">0</div><div class="key">⌫</div><div class="key" style="background:#222;border-color:rgba(255,255,255,0.08)">完成</div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn active"><span class="nav-icon">+</span></div>
+              <div class="nav-item"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DARK: Assets -->
+    <div class="phone-col">
+      <div class="screen-label">Assets 资产</div>
+      <div class="dark">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="assets-header">
+              <h3>我的资产</h3>
+              <div class="add-btn">+ 添加账户</div>
+            </div>
+            <div class="total-section">
+              <div class="total-label">TOTAL ASSETS</div>
+              <div class="total-amount">¥125,830</div>
+              <div class="currency-breakdown">
+                <span>CNY ¥44,350</span>
+                <span>USD $8,200</span>
+                <span>HKD HK$3,500</span>
+              </div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">现金 & 储蓄</div>
+              <div class="asset-item"><span class="a-name">💵 现金</span><div><div class="a-val">¥2,350</div></div></div>
+              <div class="asset-item"><span class="a-name">🏦 招商储蓄卡</span><div><div class="a-val">¥42,000</div></div></div>
+              <div class="asset-item"><span class="a-name">🏦 Chase</span><div><div class="a-val">$3,200</div></div></div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">信用卡</div>
+              <div class="asset-item">
+                <span class="a-name">💳 招商信用卡</span>
+                <div><div class="a-val" style="color:#F87171">-¥3,200</div><div class="a-sub warn">待还</div></div>
+              </div>
+            </div>
+            <div class="asset-section">
+              <div class="asset-section-title">投资</div>
+              <div class="asset-item">
+                <span class="a-name">📈 股票组合</span>
+                <div><div class="a-val">$12,500</div><div class="a-sub">+$1,200 +10.6%</div></div>
+              </div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-item"><span class="nav-icon">◉</span><span>概览</span></div>
+              <div class="nav-item"><span class="nav-icon">☰</span><span>账单</span></div>
+              <div class="nav-item center-btn"><span class="nav-icon">+</span></div>
+              <div class="nav-item active"><span class="nav-icon">◫</span><span>资产</span></div>
+              <div class="nav-item"><span class="nav-icon">⚙</span><span>设置</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
