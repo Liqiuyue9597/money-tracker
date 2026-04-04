@@ -9,7 +9,7 @@
 - **前端**: Next.js 16 + TypeScript + Tailwind CSS v4 + shadcn/ui (base-ui)
 - **后端/数据库**: Supabase (PostgreSQL + Auth + RLS)
 - **部署**: Vercel (自动部署，push 即生效)
-- **API**: Yahoo Finance (股票)、CoinGecko (加密货币)、open.er-api.com (汇率)
+- **API**: 腾讯财经 (美股/港股)、天天基金 (国内基金)、CoinGecko (加密货币)、open.er-api.com (汇率)
 
 ## 线上地址
 - **App**: https://money-tracker-pied-one.vercel.app
@@ -29,7 +29,7 @@ app/
 ├── report/page.tsx         # 年度报告
 ├── settings/page.tsx       # 设置
 └── api/
-    ├── stocks/route.ts     # Yahoo Finance 股票行情代理
+    ├── stocks/route.ts     # 股票行情代理 (腾讯财经: 美股/港股, 天天基金: 国内基金)
     ├── crypto/route.ts     # CoinGecko 加密货币价格代理
     └── exchange/route.ts   # 汇率代理 (open.er-api.com)
 
@@ -144,7 +144,6 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 NEXT_PUBLIC_SUPABASE_URL=https://vwgwtknbyngalyexnaei.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key in .env.local>
 ```
-Vercel 上已配置相同变量。
 
 ## 常用命令
 ```bash
@@ -161,6 +160,8 @@ vercel --prod        # 手动部署到生产
 - `.env.local` 在 .gitignore 中，不会被提交
 - supabase.ts 中 URL 有 placeholder 兜底，避免构建时静态生成报错
 - 汇率 API 有 1 小时客户端缓存，股票/加密货币 5 分钟服务端缓存
+- 股票行情数据源：腾讯财经（美股前缀 `us`、港股前缀 `r_hk`）+ 天天基金（国内基金6位代码）
+- 股票和基金混合管理，通过 symbol 格式自动路由：`.HK` → 港股，6位数字 → 国内基金，其他 → 美股
 - accounts.balance **只能通过交易触发器修改**，创建时可设初始余额，之后不可手动改
 
 ## API 路由安全规范

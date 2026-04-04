@@ -14,13 +14,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
+
+/** Check if symbol is a CN fund (6-digit number) */
+function isFundSymbol(symbol: string): boolean {
+  return /^\d{6}$/.test(symbol);
+}
 
 export function StockPortfolio() {
   const { user } = useApp();
   const [holdings, setHoldings] = useState<StockHolding[]>([]);
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
+  const [manualPrices, setManualPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -32,9 +38,26 @@ export function StockPortfolio() {
   const [quantity, setQuantity] = useState("");
   const [currency, setCurrency] = useState<Currency>("USD");
 
+  // Manual price edit dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editSymbol, setEditSymbol] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+
   useEffect(() => {
     if (user) loadHoldings();
   }, [user]);
+
+  // Auto-detect currency when symbol changes
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (isFundSymbol(sym)) {
+      setCurrency("CNY");
+    } else if (sym.endsWith(".HK")) {
+      setCurrency("HKD");
+    } else if (sym.length > 0) {
+      setCurrency("USD");
+    }
+  }, [symbol]);
 
   async function loadHoldings() {
     if (!user) return;
@@ -110,6 +133,31 @@ export function StockPortfolio() {
     setHoldings((prev) => prev.filter((h) => h.id !== id));
   }
 
+  function openEditDialog(sym: string, currentPrice: number) {
+    setEditSymbol(sym);
+    setEditPrice(currentPrice > 0 ? currentPrice.toString() : "");
+    setEditDialogOpen(true);
+  }
+
+  function handleManualPriceSave() {
+    const price = parseFloat(editPrice);
+    if (!editSymbol || isNaN(price) || price <= 0) {
+      toast.error("请输入有效的价格");
+      return;
+    }
+    setManualPrices((prev) => ({ ...prev, [editSymbol]: price }));
+    setEditDialogOpen(false);
+    toast.success(`已手动更新 ${editSymbol} 价格为 ${price}`);
+  }
+
+  /** Get effective price for a symbol: API quote > manual price > 0 */
+  function getEffectivePrice(sym: string): number {
+    const quote = quotes[sym];
+    if (quote && quote.price > 0) return quote.price;
+    if (manualPrices[sym]) return manualPrices[sym];
+    return 0;
+  }
+
   // Calculate totals
   let totalCost = 0;
   let totalValue = 0;
@@ -140,13 +188,13 @@ export function StockPortfolio() {
               </DialogHeader>
               <div className="space-y-3">
                 <Input
-                  placeholder="股票代码 (如 AAPL, 0700.HK, 600519.SS)"
+                  placeholder="股票代码 (如 AAPL, 0700.HK) 或基金代码 (如 000979)"
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                   className="rounded-xl"
                 />
                 <Input
-                  placeholder="股票名称（选填）"
+                  placeholder={isFundSymbol(symbol.trim()) ? "基金名称（选填）" : "股票名称（选填）"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="rounded-xl"
@@ -154,7 +202,7 @@ export function StockPortfolio() {
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     type="number"
-                    placeholder="买入价格"
+                    placeholder={isFundSymbol(symbol.trim()) ? "买入净值" : "买入价格"}
                     value={buyPrice}
                     onChange={(e) => setBuyPrice(e.target.value)}
                     step="0.01"
@@ -162,7 +210,7 @@ export function StockPortfolio() {
                   />
                   <Input
                     type="number"
-                    placeholder="持仓数量"
+                    placeholder={isFundSymbol(symbol.trim()) ? "持有份额" : "持仓数量"}
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     step="0.01"
@@ -201,8 +249,8 @@ export function StockPortfolio() {
               totalValue = 0;
               holdings.forEach((h) => {
                 const cost = Number(h.buy_price) * Number(h.quantity);
-                const quote = quotes[h.symbol];
-                const value = quote ? quote.price * Number(h.quantity) : cost;
+                const currentPrice = getEffectivePrice(h.symbol);
+                const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
                 totalCost += cost;
                 totalValue += value;
               });
@@ -245,11 +293,13 @@ export function StockPortfolio() {
         <div className="space-y-3">
           {holdings.map((h) => {
             const quote = quotes[h.symbol];
-            const currentPrice = quote?.price || 0;
+            const currentPrice = getEffectivePrice(h.symbol);
             const cost = Number(h.buy_price) * Number(h.quantity);
             const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
             const pnl = value - cost;
             const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+            const isFund = quote?.isFund || isFundSymbol(h.symbol);
+            const isManual = !quote?.price && manualPrices[h.symbol] !== undefined;
 
             return (
               <Card key={h.id} className="border-0 shadow-sm overflow-hidden">
@@ -259,21 +309,26 @@ export function StockPortfolio() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-sm">{h.symbol}</span>
                         <Badge variant="secondary" className="text-[10px] px-1.5">
-                          {h.currency}
+                          {isFund ? "基金" : h.currency}
                         </Badge>
+                        {isManual && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 text-amber-600 border-amber-300">
+                            手动
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        {h.name || h.symbol}
+                        {quote?.name || h.name || h.symbol}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1 tabular-nums">
-                        {Number(h.quantity)} 股 × {CURRENCIES[h.currency].symbol}{Number(h.buy_price).toFixed(2)}
+                        {Number(h.quantity)} {isFund ? "份" : "股"} × {CURRENCIES[h.currency].symbol}{Number(h.buy_price).toFixed(isFund ? 4 : 2)}
                       </div>
                     </div>
                     <div className="text-right">
                       {currentPrice > 0 ? (
                         <>
                           <div className="font-bold tabular-nums text-sm">
-                            {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(2)}
+                            {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
                           </div>
                           <div
                             className={`text-xs font-semibold tabular-nums ${
@@ -284,15 +339,29 @@ export function StockPortfolio() {
                           </div>
                         </>
                       ) : (
-                        <div className="text-xs text-muted-foreground">行情加载中</div>
+                        <button
+                          onClick={() => openEditDialog(h.symbol, 0)}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          手动输入价格
+                        </button>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleDelete(h.id)}
-                      className="ml-2 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex flex-col ml-1 gap-0.5">
+                      <button
+                        onClick={() => openEditDialog(h.symbol, currentPrice)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                        title="手动更新价格"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(h.id)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -300,6 +369,32 @@ export function StockPortfolio() {
           })}
         </div>
       )}
+
+      {/* Manual Price Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-sm mx-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>手动更新价格 — {editSymbol}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="number"
+              placeholder="输入当前价格/净值"
+              value={editPrice}
+              onChange={(e) => setEditPrice(e.target.value)}
+              step="0.0001"
+              className="rounded-xl"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              手动输入的价格仅在本次会话有效，刷新页面后会重新从 API 获取。
+            </p>
+            <Button onClick={handleManualPriceSave} className="w-full rounded-xl">
+              确认更新
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
