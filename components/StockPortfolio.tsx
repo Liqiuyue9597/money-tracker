@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { supabase, type StockHolding, type Currency, CURRENCIES } from "@/lib/supabase";
+import { supabase, type StockHolding, type Currency, type StockAssetType, CURRENCIES } from "@/lib/supabase";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,20 +17,8 @@ import {
 import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-/** Check if symbol is a CN fund (6-digit number) */
-function isFundSymbol(symbol: string): boolean {
-  return /^\d{6}$/.test(symbol);
-}
-
-/** Get holding type for grouping and display */
-function getHoldingType(symbol: string): "fund" | "hk" | "us" {
-  if (isFundSymbol(symbol)) return "fund";
-  if (symbol.endsWith(".HK")) return "hk";
-  return "us";
-}
-
 /** Get type label for display */
-function getTypeLabel(type: "fund" | "hk" | "us"): string {
+function getTypeLabel(type: StockAssetType): string {
   switch (type) {
     case "fund": return "基金";
     case "hk": return "港股";
@@ -53,7 +41,7 @@ export function StockPortfolio() {
   const [buyPrice, setBuyPrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [currency, setCurrency] = useState<Currency>("USD");
-  const [holdingType, setHoldingType] = useState<"us" | "hk" | "fund">("us");
+  const [holdingType, setHoldingType] = useState<StockAssetType>("us");
 
   // Manual price edit dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -64,21 +52,6 @@ export function StockPortfolio() {
   useEffect(() => {
     if (user) loadHoldings();
   }, [user]);
-
-  // Auto-detect holding type when symbol changes
-  useEffect(() => {
-    const sym = symbol.trim().toUpperCase();
-    if (isFundSymbol(sym)) {
-      setHoldingType("fund");
-      setCurrency("CNY");
-    } else if (sym.endsWith(".HK")) {
-      setHoldingType("hk");
-      setCurrency("HKD");
-    } else if (sym.length > 0) {
-      setHoldingType("us");
-      setCurrency("USD");
-    }
-  }, [symbol]);
 
   async function loadHoldings() {
     if (!user) return;
@@ -128,6 +101,7 @@ export function StockPortfolio() {
         quantity: parseFloat(quantity),
         buy_date: new Date().toISOString().split("T")[0],
         currency,
+        asset_type: holdingType,
       });
 
       if (error) {
@@ -179,22 +153,27 @@ export function StockPortfolio() {
     return 0;
   }
 
-  /** Group holdings by type and sort by created_at */
+  /** Group holdings by asset_type and sort by created_at */
   const groupedHoldings = useMemo(() => {
-    const groups: Record<"fund" | "hk" | "us", StockHolding[]> = {
+    const groups: Record<StockAssetType, StockHolding[]> = {
       fund: [],
       hk: [],
       us: [],
     };
 
     holdings.forEach((h) => {
-      const type = getHoldingType(h.symbol);
+      // Use asset_type from database, fallback to symbol-based detection
+      const type = h.asset_type || (() => {
+        if (h.symbol.length === 6 && /^\d{6}$/.test(h.symbol)) return "fund";
+        if (h.symbol.endsWith(".HK")) return "hk";
+        return "us";
+      })();
       groups[type].push(h);
     });
 
     // Sort each group: by created_at descending (newest first)
     Object.keys(groups).forEach((key) => {
-      groups[key as "fund" | "hk" | "us"].sort((a, b) =>
+      groups[key as StockAssetType].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
     });
@@ -204,7 +183,7 @@ export function StockPortfolio() {
 
   /** Get totals for each type */
   const typeTotals = useMemo(() => {
-    const totals: Record<"fund" | "hk" | "us", { cost: number; value: number }> = {
+    const totals: Record<StockAssetType, { cost: number; value: number }> = {
       fund: { cost: 0, value: 0 },
       hk: { cost: 0, value: 0 },
       us: { cost: 0, value: 0 },
@@ -215,8 +194,8 @@ export function StockPortfolio() {
         const cost = Number(h.buy_price) * Number(h.quantity);
         const currentPrice = getEffectivePrice(h.symbol);
         const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
-        totals[type as "fund" | "hk" | "us"].cost += cost;
-        totals[type as "fund" | "hk" | "us"].value += value;
+        totals[type as StockAssetType].cost += cost;
+        totals[type as StockAssetType].value += value;
       });
     });
 
@@ -238,7 +217,7 @@ export function StockPortfolio() {
   const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
 
   // Order: fund → hk → us
-  const types: Array<"fund" | "hk" | "us"> = ["fund", "hk", "us"];
+  const types: StockAssetType[] = ["fund", "hk", "us"];
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-24">
@@ -272,6 +251,7 @@ export function StockPortfolio() {
                       key={type}
                       onClick={() => {
                         setHoldingType(type);
+                        // Auto-set default currency based on type (but still allow changes)
                         switch (type) {
                           case "fund": setCurrency("CNY"); break;
                           case "hk": setCurrency("HKD"); break;
@@ -289,9 +269,11 @@ export function StockPortfolio() {
 
                 {/* Symbol input */}
                 <Input
-                  placeholder={holdingType === "fund" ? "基金代码 (如 000979)" :
-                            holdingType === "hk" ? "港股代码 (如 0700.HK)" :
-                            "美股代码 (如 AAPL)"}
+                  placeholder={
+                    holdingType === "fund" ? "基金/股票代码 (如 000979, QQQ)" :
+                    holdingType === "hk" ? "港股代码 (如 0700.HK)" :
+                    "美股代码 (如 AAPL, GOOG)"
+                  }
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                   className="rounded-xl"
@@ -299,7 +281,7 @@ export function StockPortfolio() {
 
                 {/* Name input */}
                 <Input
-                  placeholder={holdingType === "fund" ? "基金名称（选填）" : "股票名称（选填）"}
+                  placeholder="名称（选填）"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="rounded-xl"
@@ -309,15 +291,15 @@ export function StockPortfolio() {
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     type="number"
-                    placeholder={holdingType === "fund" ? "买入净值" : "买入价格"}
+                    placeholder="买入价格/净值"
                     value={buyPrice}
                     onChange={(e) => setBuyPrice(e.target.value)}
-                    step={holdingType === "fund" ? "0.0001" : "0.01"}
+                    step="0.0001"
                     className="rounded-xl"
                   />
                   <Input
                     type="number"
-                    placeholder={holdingType === "fund" ? "持有份额" : "持仓数量"}
+                    placeholder="数量/份额"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     step="0.01"
@@ -325,12 +307,12 @@ export function StockPortfolio() {
                   />
                 </div>
 
-                {/* Currency selector (disabled, auto-set by type) */}
-                <div className="flex gap-1 rounded-xl bg-muted p-1 opacity-50">
-                  {(["USD", "HKD", "CNY"] as Currency[]).map((c) => (
+                {/* Currency selector */}
+                <div className="flex gap-1 rounded-xl bg-muted p-1">
+                  {(["CNY", "USD", "HKD"] as Currency[]).map((c) => (
                     <button
                       key={c}
-                      disabled
+                      onClick={() => setCurrency(c)}
                       className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
                         currency === c ? "bg-background shadow-sm" : "text-muted-foreground"
                       }`}
@@ -339,6 +321,13 @@ export function StockPortfolio() {
                     </button>
                   ))}
                 </div>
+
+                {/* Hint for manual funds */}
+                {holdingType === "fund" && (
+                  <p className="text-xs text-muted-foreground">
+                    💡 自定义基金（如美元基金）请手动输入价格
+                  </p>
+                )}
 
                 <Button onClick={handleAdd} disabled={adding} className="w-full rounded-xl">
                   {adding ? "添加中..." : "确认添加"}
@@ -428,6 +417,9 @@ export function StockPortfolio() {
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm">{h.symbol}</span>
+                              <Badge variant="secondary" className="text-[10px] px-1.5">
+                                {h.currency}
+                              </Badge>
                               {isManual && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 text-amber-600 border-amber-300">
                                   手动

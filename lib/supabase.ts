@@ -19,6 +19,7 @@ export type Currency = "CNY" | "USD" | "HKD";
 export type TransactionType = "expense" | "income";
 export type StockTransactionType = "buy" | "sell";
 export type AccountType = "cash" | "stock" | "crypto";
+export type StockAssetType = "fund" | "hk" | "us";
 
 export interface Account {
   id: string;
@@ -86,6 +87,7 @@ export interface StockHolding {
   buy_date: string;
   currency: Currency;
   notes: string;
+  asset_type: StockAssetType;
   created_at: string;
 }
 

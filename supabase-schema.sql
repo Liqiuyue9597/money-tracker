@@ -58,12 +58,17 @@ create table if not exists stock_holdings (
   buy_date date not null default current_date,
   currency text not null default 'USD' check (currency in ('CNY', 'USD', 'HKD')),
   notes text default '',
+  asset_type text not null default 'us' check (asset_type in ('fund', 'hk', 'us')),
   created_at timestamptz not null default now()
 );
 
 alter table stock_holdings enable row level security;
 create policy "Users can manage own stock_holdings" on stock_holdings
   for all using (auth.uid() = user_id);
+
+-- Add index for asset_type
+create index if not exists idx_stock_holdings_asset_type
+on stock_holdings(asset_type);
 
 -- ============================================
 -- Stock Transactions table
