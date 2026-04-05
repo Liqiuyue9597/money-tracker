@@ -43,8 +43,9 @@ components/
 ├── AssetOverview.tsx       # 资产总览 (净值/现金账户/股票/加密货币/汇率)
 ├── StockPortfolio.tsx      # 股票持仓管理
 ├── AccountManager.tsx      # 添加/编辑现金账户对话框 (银行预设+自定义)
+├── CategoryManager.tsx     # 添加/编辑/删除分类对话框 (emoji图标选择)
 ├── AnnualReport.tsx        # 年度报告 (趋势图/分类构成/储蓄率)
-├── SettingsPage.tsx        # 设置 (币种/导出/快捷指令说明)
+├── SettingsPage.tsx        # 设置 (币种/分类管理/导出/快捷指令说明)
 └── ui/                     # shadcn/ui 组件 (card, input, dialog, badge, etc.)
 
 lib/
@@ -80,7 +81,7 @@ lib/
 
 | 表 | 用途 | RLS |
 |---|---|---|
-| `categories` | 记账分类 (餐饮/交通/购物等，18个默认) | ✅ user_id |
+| `categories` | 记账分类 (餐饮/交通/购物等，18个默认，支持自定义增删改) | ✅ user_id |
 | `transactions` | 收支记录 (关联 category_id + account_id) | ✅ user_id |
 | `accounts` | 现金账户 (type=cash) | ✅ user_id |
 | `stock_holdings` | 股票持仓 (symbol, quantity, buy_price, currency) | ✅ user_id |
@@ -100,6 +101,10 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
   - expense → balance -= amount
   - income → balance += amount
   - 仅在 account_id IS NOT NULL 时触发
+- **分类使用次数触发器**: `trg_update_category_usage_count` — INSERT/UPDATE/DELETE 交易时自动更新 categories.usage_count
+  - INSERT → usage_count +1
+  - DELETE → usage_count -1
+  - UPDATE (category_id 变更) → 旧分类 -1，新分类 +1
 - **新用户触发器**: `handle_new_user()` — 注册时自动创建：
   - 18 个默认分类（12 支出 + 6 收入）
   - 4 个默认账户：中国银行储蓄卡、中国银行信用卡、微信支付、支付宝（全部 type=cash）
@@ -112,10 +117,17 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 - `BankPreset`: { name, icon, types } — 银行/机构预设列表
 - 主要接口: Transaction, Category, Account, StockHolding, CryptoHolding
 
+## 分类管理
+- **自定义分类**: 用户可在设置页面添加/编辑/删除分类（支出和收入分开管理）
+- **使用频率排序**: 分类按 `usage_count DESC, sort_order ASC` 排序，最常用的自动排在最前面
+- **usage_count 字段**: 由数据库触发器自动维护，记录每个分类被使用的交易次数
+- **删除保护**: 已有交易记录的分类（usage_count > 0）不允许删除
+- **管理入口**: SettingsPage → 分类管理 section → CategoryManager Dialog
+
 ## 全局状态 (AppProvider)
 通过 React Context 提供（value 已用 useMemo 优化，函数用 useCallback 包裹）:
 - `user` — Supabase Auth 用户
-- `categories` — 用户分类列表
+- `categories` — 用户分类列表（按使用频率降序排列）
 - `accounts` — 用户账户列表 (过滤 is_archived)
 - `mainCurrency` — 主币种 (默认 CNY)
 - `signIn/signUp/signOut` — 认证方法
@@ -133,6 +145,7 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 - 底部导航用 Lucide 图标，中间"记账"按钮突出
 - 移动端优先，max-w-lg 居中
 - AccountManager: 黑白极简风格 (bg-[#0A0A0A] 按钮, border-hairline 边框)
+- CategoryManager: 同 AccountManager 风格，emoji 图标 grid 选择
 
 ## 认证
 - Google OAuth (通过 Supabase Auth)
