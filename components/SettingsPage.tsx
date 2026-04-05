@@ -1,12 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useApp } from "@/components/AppProvider";
-import { supabase, type Currency, CURRENCIES } from "@/lib/supabase";
+import { supabase, type Currency, type TransactionType, type Category, CURRENCIES } from "@/lib/supabase";
+import { CategoryManager } from "@/components/CategoryManager";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 export function SettingsPage() {
-  const { user, mainCurrency, setMainCurrency, signOut } = useApp();
+  const { user, mainCurrency, setMainCurrency, categories, signOut } = useApp();
+  const [catTab, setCatTab] = useState<TransactionType>("expense");
+  const [catDialogOpen, setCatDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   async function handleExportCSV() {
     if (!user) return;
@@ -90,6 +95,80 @@ export function SettingsPage() {
         </div>
         <div className="mt-4" style={{ height: "0.5px", background: "#E8E6E3" }} />
       </div>
+
+      {/* Category Management */}
+      <div className="mb-8">
+        <div className="section-label mb-4">分类管理</div>
+        {/* Expense / Income tabs */}
+        <div className="flex gap-4 mb-4">
+          <button
+            onClick={() => setCatTab("expense")}
+            className="relative pb-1"
+          >
+            <span className={`text-[14px] transition-colors ${catTab === "expense" ? "text-[#0A0A0A] font-medium" : "text-[#C4BDB4]"}`}>
+              支出
+            </span>
+            {catTab === "expense" && (
+              <div className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-[#0A0A0A]" />
+            )}
+          </button>
+          <button
+            onClick={() => setCatTab("income")}
+            className="relative pb-1"
+          >
+            <span className={`text-[14px] transition-colors ${catTab === "income" ? "text-[#0A0A0A] font-medium" : "text-[#C4BDB4]"}`}>
+              收入
+            </span>
+            {catTab === "income" && (
+              <div className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-[#0A0A0A]" />
+            )}
+          </button>
+        </div>
+
+        {/* Category list */}
+        <div className="space-y-0.5">
+          {categories
+            .filter((c) => c.type === catTab)
+            .map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setEditingCategory(cat);
+                  setCatDialogOpen(true);
+                }}
+                className="flex w-full items-center gap-3 py-2.5 text-[14px] hover:bg-[#F0EFED] rounded-lg px-2 transition-colors"
+              >
+                <span className="text-[18px]">{cat.icon}</span>
+                <span className="flex-1 text-left">{cat.name}</span>
+                {cat.usage_count > 0 && (
+                  <span className="text-[11px] text-[#A8A29E] tabular-nums">{cat.usage_count} 笔</span>
+                )}
+                <span className="text-[#C4BDB4]">→</span>
+              </button>
+            ))}
+        </div>
+
+        {/* Add category button */}
+        <button
+          onClick={() => {
+            setEditingCategory(null);
+            setCatDialogOpen(true);
+          }}
+          className="flex w-full items-center justify-center gap-1.5 py-2.5 mt-2 text-[13px] text-[#A8A29E] hover:text-[#0A0A0A] transition-colors rounded-lg hover:bg-[#F0EFED]"
+        >
+          <span>+</span>
+          <span>添加{catTab === "expense" ? "支出" : "收入"}分类</span>
+        </button>
+
+        <div className="mt-4" style={{ height: "0.5px", background: "#E8E6E3" }} />
+      </div>
+
+      <CategoryManager
+        open={catDialogOpen}
+        onOpenChange={setCatDialogOpen}
+        editCategory={editingCategory}
+        defaultType={catTab}
+      />
 
       {/* Data */}
       <div className="mb-8">

@@ -57,6 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from("categories")
         .select("*")
         .eq("user_id", user!.id)
+        .order("usage_count", { ascending: false })
         .order("sort_order");
       if (error) throw error;
       return data ?? [];

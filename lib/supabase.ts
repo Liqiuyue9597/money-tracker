@@ -77,6 +77,7 @@ export interface Category {
   icon: string;
   type: TransactionType;
   sort_order: number;
+  usage_count: number;
 }
 
 export interface StockHolding {
