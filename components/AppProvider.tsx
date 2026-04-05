@@ -75,6 +75,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .select("*")
         .eq("user_id", user!.id)
         .eq("is_archived", false)
+        .order("usage_count", { ascending: false })
         .order("sort_order");
       if (error) throw error;
       return data ?? [];
