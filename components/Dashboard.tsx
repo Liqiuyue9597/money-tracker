@@ -55,8 +55,8 @@ export function Dashboard() {
   }, [transactions]);
 
   // Derive stock totals
-  const { stockValue, stockPnL } = useMemo(() => {
-    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockPnL: 0 };
+  const { stockValue, stockCost, stockPnL } = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockPnL: 0 };
     let totalVal = 0, totalCost = 0;
     for (const h of holdings) {
       const q = quotes[h.symbol];
@@ -64,7 +64,7 @@ export function Dashboard() {
       totalCost += cost;
       totalVal += q ? q.price * Number(h.quantity) : cost;
     }
-    return { stockValue: totalVal, stockPnL: totalVal - totalCost };
+    return { stockValue: totalVal, stockCost: totalCost, stockPnL: totalVal - totalCost };
   }, [holdings, quotes]);
 
   const net = monthIncome - monthExpense;
@@ -193,21 +193,33 @@ export function Dashboard() {
               <span className="font-medium text-sm">投资组合</span>
             </div>
             <div className="flex items-end justify-between">
-              <p className="text-xl font-bold tabular-nums">
-                $
-                {stockValue.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </p>
-              <span
-                className={`text-sm font-medium tabular-nums ${
-                  stockPnL >= 0 ? "text-emerald-600" : "text-red-600"
-                }`}
-              >
-                {stockPnL >= 0 ? "+" : ""}
-                {stockPnL.toFixed(2)}
-              </span>
+              <div>
+                <p className="text-xl font-bold tabular-nums">
+                  $
+                  {stockValue.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p className="text-[10px] text-muted-foreground tabular-nums">
+                  成本 ${stockCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="text-right">
+                <span
+                  className={`text-sm font-medium tabular-nums ${
+                    stockPnL >= 0 ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  {stockPnL >= 0 ? "+" : ""}
+                  ${Math.abs(stockPnL).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                {stockCost > 0 && (
+                  <p className={`text-[10px] font-medium tabular-nums ${stockPnL >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {stockPnL >= 0 ? "+" : ""}{((stockPnL / stockCost) * 100).toFixed(1)}%
+                  </p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

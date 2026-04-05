@@ -48,8 +48,8 @@ export function AssetOverview() {
   const loading = !holdings && !cryptoHoldings;
 
   // Derive stock totals
-  const { stockValue, stockCost, stockCurrency } = useMemo(() => {
-    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockCurrency: "USD" as Currency };
+  const { stockValue, stockCost, stockCurrency, stockPnl, stockPnlPct } = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockCurrency: "USD" as Currency, stockPnl: 0, stockPnlPct: 0 };
     let totalVal = 0, totalCost = 0;
     for (const h of holdings) {
       const q = quotes[h.symbol];
@@ -57,7 +57,9 @@ export function AssetOverview() {
       totalCost += cost;
       totalVal += q ? q.price * Number(h.quantity) : cost;
     }
-    return { stockValue: totalVal, stockCost: totalCost, stockCurrency: (holdings[0]?.currency || "USD") as Currency };
+    const pnl = totalVal - totalCost;
+    const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
+    return { stockValue: totalVal, stockCost: totalCost, stockCurrency: (holdings[0]?.currency || "USD") as Currency, stockPnl: pnl, stockPnlPct: pnlPct };
   }, [holdings, quotes]);
 
   // Cash accounts split
@@ -232,16 +234,22 @@ export function AssetOverview() {
         {stockValue > 0 ? (
           <Card className="border-0 shadow-sm overflow-hidden">
             <CardContent className="p-0">
-              <a href="/stocks" className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors">
-                <span className="text-2xl">📈</span>
-                <div className="flex-1 text-left">
-                  <div className="text-sm font-medium">股票组合</div>
-                  <div className={`text-[10px] font-medium tabular-nums ${stockValue >= stockCost ? "text-emerald-600" : "text-red-600"}`}>
-                    {stockValue >= stockCost ? "+" : ""}{(stockValue - stockCost).toFixed(2)}
-                    {stockCost > 0 && ` (${(((stockValue - stockCost) / stockCost) * 100).toFixed(1)}%)`}
+              <a href="/stocks" className="block px-4 py-3.5 hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📈</span>
+                  <div className="flex-1 text-left">
+                    <div className="text-sm font-medium">股票组合</div>
+                    <div className="text-[10px] text-muted-foreground tabular-nums">
+                      成本 {formatMoney(stockCost, stockCurrency)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, stockCurrency)}</div>
+                    <div className={`text-[10px] font-medium tabular-nums ${stockPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {stockPnl >= 0 ? "+" : ""}{formatMoney(stockPnl, stockCurrency)} ({stockPnl >= 0 ? "+" : ""}{stockPnlPct.toFixed(1)}%)
+                    </div>
                   </div>
                 </div>
-                <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, stockCurrency)}</div>
               </a>
             </CardContent>
           </Card>
