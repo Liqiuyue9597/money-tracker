@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type Currency, type AccountType, CURRENCIES, BANK_PRESETS } from "@/lib/supabase";
 import {
@@ -38,15 +38,28 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
   // Always show bank picker for new accounts
   const showBankPicker = !editAccount;
 
+  // Sync state when editAccount or open changes (useState initial values only apply on first render)
+  useEffect(() => {
+    if (open && editAccount) {
+      setName(editAccount.name);
+      setCurrency(editAccount.currency);
+      setIcon(editAccount.icon);
+      setInitialBalance(String(editAccount.balance));
+      setExcludeFromTotal(editAccount.exclude_from_total || false);
+      setSelectedBank(null);
+      setCustomBankName("");
+    } else if (open && !editAccount) {
+      setName("");
+      setCurrency("CNY");
+      setIcon("💰");
+      setInitialBalance("0");
+      setExcludeFromTotal(false);
+      setSelectedBank(null);
+      setCustomBankName("");
+    }
+  }, [open, editAccount]);
+
   const handleOpenChange = (v: boolean) => {
-    if (v && !editAccount) {
-      setName(""); setCurrency("CNY"); setIcon("💰"); setInitialBalance("0"); setExcludeFromTotal(false);
-      setSelectedBank(null); setCustomBankName("");
-    }
-    if (v && editAccount) {
-      setName(editAccount.name); setCurrency(editAccount.currency); setIcon(editAccount.icon); setInitialBalance(String(editAccount.balance)); setExcludeFromTotal(editAccount.exclude_from_total || false);
-      setSelectedBank(null); setCustomBankName("");
-    }
     onOpenChange(v);
   };
 
