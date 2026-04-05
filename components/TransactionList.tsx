@@ -1,14 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import {
-  supabase,
-  type Transaction,
-  type Currency,
-  CURRENCIES,
-  formatMoney,
-} from "@/lib/supabase";
+import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { useMonthTransactions, type TransactionWithJoins } from "@/lib/swr-hooks";
+import { supabase } from "@/lib/supabase";
 import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,50 +14,16 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
-interface TransactionWithJoins extends Transaction {
-  categories?: { name: string; icon: string } | null;
-  accounts?: { name: string; icon: string } | null;
-}
-
 export function TransactionList() {
   const { user, mainCurrency } = useApp();
-  const [transactions, setTransactions] = useState<TransactionWithJoins[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-
-  useEffect(() => {
-    if (user) loadTransactions();
-  }, [user, currentMonth]);
-
-  async function loadTransactions() {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("*, categories(name, icon), accounts(name, icon)")
-        .eq("user_id", user.id)
-        .gte("date", format(monthStart, "yyyy-MM-dd"))
-        .lte("date", format(monthEnd, "yyyy-MM-dd"))
-        .order("date", { ascending: false })
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      if (data) setTransactions(data);
-    } catch (err) {
-      console.error("Failed to load transactions:", err);
-      toast.error("加载账单失败");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: transactions, isLoading: loading, mutate } = useMonthTransactions(user?.id, currentMonth);
 
   const filtered = useMemo(
     () =>
-      transactions.filter(
+      (transactions ?? []).filter(
         (t) =>
           !search ||
           t.note?.toLowerCase().includes(search.toLowerCase()) ||
@@ -93,7 +55,11 @@ export function TransactionList() {
     try {
       const { error } = await supabase.from("transactions").delete().eq("id", id);
       if (error) throw error;
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
+      // Optimistic update: remove from cached data
+      mutate(
+        (prev) => prev?.filter((t) => t.id !== id),
+        { revalidate: false }
+      );
       toast.success("已删除");
     } catch (err) {
       console.error("Failed to delete transaction:", err);
@@ -162,7 +128,7 @@ export function TransactionList() {
       </div>
 
       {/* Transactions */}
-      {loading ? (
+      {loading && !transactions ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
           加载中...
         </div>
@@ -216,7 +182,7 @@ export function TransactionList() {
                         >
                           <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-lg">
-                              {t.categories?.icon || "📌"}
+                              {t.categories?.icon || "\ud83d\udccc"}
                             </div>
                             <div>
                               <p className="text-sm font-medium">

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type Account, type Currency, type CryptoHolding, CURRENCIES, formatMoney } from "@/lib/supabase";
-import type { StockHolding } from "@/lib/supabase";
-import { getStockQuotes } from "@/lib/stocks";
-import { getCryptoPrices, type CryptoPrice, CRYPTO_SYMBOLS } from "@/lib/crypto";
-import { getExchangeRates, convertCurrency, type ExchangeRates } from "@/lib/exchange";
+import { useStockHoldings, useStockQuotes, useCryptoHoldings, useCryptoPrices, useExchangeRates } from "@/lib/swr-hooks";
+import { convertCurrency } from "@/lib/exchange";
+import { CRYPTO_SYMBOLS } from "@/lib/crypto";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,14 +25,18 @@ import {
 
 export function AssetOverview() {
   const { user, accounts, mainCurrency, refreshAccounts } = useApp();
-  const [rates, setRates] = useState<ExchangeRates | null>(null);
-  const [usdRates, setUsdRates] = useState<ExchangeRates | null>(null);
-  const [stockValue, setStockValue] = useState(0);
-  const [stockCost, setStockCost] = useState(0);
-  const [stockCurrency, setStockCurrency] = useState<Currency>("USD");
-  const [cryptoHoldings, setCryptoHoldings] = useState<CryptoHolding[]>([]);
-  const [cryptoPrices, setCryptoPrices] = useState<Record<string, CryptoPrice>>({});
-  const [loading, setLoading] = useState(true);
+
+  // SWR hooks
+  const { data: rates } = useExchangeRates(mainCurrency);
+  const { data: usdRates } = useExchangeRates("USD");
+  const { data: holdings } = useStockHoldings(user?.id);
+  const stockSymbols = useMemo(() => holdings ? [...new Set(holdings.map((h) => h.symbol))] : [], [holdings]);
+  const { data: quotes } = useStockQuotes(stockSymbols);
+  const { data: cryptoHoldings, mutate: mutateCrypto, isLoading: cryptoLoading } = useCryptoHoldings(user?.id);
+  const cryptoSymbols = useMemo(() => cryptoHoldings ? [...new Set(cryptoHoldings.map((c) => c.symbol))] : [], [cryptoHoldings]);
+  const { data: cryptoPrices } = useCryptoPrices(cryptoSymbols);
+
+  // UI state
   const [managerOpen, setManagerOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
   const [cryptoDialogOpen, setCryptoDialogOpen] = useState(false);
@@ -42,65 +45,22 @@ export function AssetOverview() {
   const [cryptoBuyPrice, setCryptoBuyPrice] = useState("");
   const [addingCrypto, setAddingCrypto] = useState(false);
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user, mainCurrency]);
+  const loading = !holdings && !cryptoHoldings;
 
-  async function loadData() {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const [ratesData, usdRatesData, stockRes, cryptoRes] = await Promise.all([
-        getExchangeRates(mainCurrency).catch(() => null),
-        getExchangeRates("USD").catch(() => null),
-        supabase.from("stock_holdings").select("*").eq("user_id", user.id),
-        supabase.from("crypto_holdings").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      ]);
-      if (ratesData) setRates(ratesData);
-      if (usdRatesData) setUsdRates(usdRatesData);
-
-      // Stocks
-      if (stockRes.data && stockRes.data.length > 0) {
-        try {
-          const symbols = [...new Set(stockRes.data.map((s: StockHolding) => s.symbol))];
-          const quotes = await getStockQuotes(symbols);
-          let totalVal = 0, totalCost = 0;
-          for (const h of stockRes.data as StockHolding[]) {
-            const q = quotes[h.symbol];
-            const cost = Number(h.buy_price) * Number(h.quantity);
-            totalCost += cost;
-            totalVal += q ? q.price * Number(h.quantity) : cost;
-          }
-          setStockValue(totalVal);
-          setStockCost(totalCost);
-          if (stockRes.data.length > 0) setStockCurrency(stockRes.data[0].currency);
-        } catch (err) {
-          console.error("Failed to load stock quotes:", err);
-        }
-      }
-
-      // Crypto
-      if (cryptoRes.data) {
-        setCryptoHoldings(cryptoRes.data);
-        if (cryptoRes.data.length > 0) {
-          try {
-            const symbols = [...new Set(cryptoRes.data.map((c) => c.symbol))];
-            const prices = await getCryptoPrices(symbols);
-            setCryptoPrices(prices);
-          } catch (err) {
-            console.error("Failed to load crypto prices:", err);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load asset data:", err);
-      toast.error("加载资产数据失败");
-    } finally {
-      setLoading(false);
+  // Derive stock totals
+  const { stockValue, stockCost, stockCurrency } = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockCurrency: "USD" as Currency };
+    let totalVal = 0, totalCost = 0;
+    for (const h of holdings) {
+      const q = quotes[h.symbol];
+      const cost = Number(h.buy_price) * Number(h.quantity);
+      totalCost += cost;
+      totalVal += q ? q.price * Number(h.quantity) : cost;
     }
-  }
+    return { stockValue: totalVal, stockCost: totalCost, stockCurrency: (holdings[0]?.currency || "USD") as Currency };
+  }, [holdings, quotes]);
 
-  // All cash-type accounts split by balance
+  // Cash accounts split
   const cashAccounts = useMemo(() => accounts.filter((a) => a.type === "cash"), [accounts]);
   const positiveAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) >= 0), [cashAccounts]);
   const negativeAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) < 0), [cashAccounts]);
@@ -108,17 +68,16 @@ export function AssetOverview() {
 
   // Crypto totals
   const { totalCryptoValue, totalCryptoCost } = useMemo(() => {
-    let value = 0;
-    let cost = 0;
-    for (const h of cryptoHoldings) {
-      const price = cryptoPrices[h.symbol]?.usd || 0;
+    let value = 0, cost = 0;
+    for (const h of (cryptoHoldings ?? [])) {
+      const price = cryptoPrices?.[h.symbol]?.usd || 0;
       value += price * Number(h.quantity);
       cost += Number(h.buy_price) * Number(h.quantity);
     }
     return { totalCryptoValue: value, totalCryptoCost: cost };
   }, [cryptoHoldings, cryptoPrices]);
 
-  // Net worth (exclude accounts with exclude_from_total)
+  // Net worth
   const totalNetWorth = useMemo(() => {
     let netWorth = 0;
     for (const acc of accounts) {
@@ -135,20 +94,20 @@ export function AssetOverview() {
     if (!user || !cryptoQty || !cryptoBuyPrice) { toast.error("请填写完整"); return; }
     setAddingCrypto(true);
     try {
-    const { error } = await supabase.from("crypto_holdings").insert({
-      user_id: user.id,
-      symbol: cryptoSymbol,
-      name: CRYPTO_SYMBOLS[cryptoSymbol]?.name || cryptoSymbol,
-      quantity: parseFloat(cryptoQty),
-      buy_price: parseFloat(cryptoBuyPrice),
-      buy_date: new Date().toISOString().split("T")[0],
-    });
-    if (error) { toast.error("添加失败"); } else {
-      toast.success(`已添加 ${cryptoSymbol}`);
-      setCryptoDialogOpen(false);
-      setCryptoQty(""); setCryptoBuyPrice("");
-      loadData();
-    }
+      const { error } = await supabase.from("crypto_holdings").insert({
+        user_id: user.id,
+        symbol: cryptoSymbol,
+        name: CRYPTO_SYMBOLS[cryptoSymbol]?.name || cryptoSymbol,
+        quantity: parseFloat(cryptoQty),
+        buy_price: parseFloat(cryptoBuyPrice),
+        buy_date: new Date().toISOString().split("T")[0],
+      });
+      if (error) { toast.error("添加失败"); } else {
+        toast.success(`已添加 ${cryptoSymbol}`);
+        setCryptoDialogOpen(false);
+        setCryptoQty(""); setCryptoBuyPrice("");
+        mutateCrypto(); // SWR revalidate
+      }
     } finally {
       setAddingCrypto(false);
     }
@@ -161,7 +120,12 @@ export function AssetOverview() {
       toast.error("删除失败");
       return;
     }
-    setCryptoHoldings((prev) => prev.filter((h) => h.id !== id));
+    // Optimistic update
+    mutateCrypto(
+      (prev) => prev?.filter((h) => h.id !== id),
+      { revalidate: false }
+    );
+    toast.success("已删除");
   }
 
   if (loading) {
@@ -193,7 +157,7 @@ export function AssetOverview() {
         </CardContent>
       </Card>
 
-      {/* Positive balance accounts: 储蓄与支付 */}
+      {/* Positive balance accounts */}
       {positiveAccounts.length > 0 && (
         <div className="mb-4">
           <div className="text-xs text-muted-foreground mb-2 px-1 flex items-center gap-1.5">
@@ -220,7 +184,7 @@ export function AssetOverview() {
         </div>
       )}
 
-      {/* Negative balance accounts: 待还 */}
+      {/* Negative balance accounts */}
       {negativeAccounts.length > 0 && (
         <div className="mb-4">
           <div className="text-xs text-muted-foreground mb-2 px-1 flex items-center gap-1.5">
@@ -254,7 +218,7 @@ export function AssetOverview() {
         </div>
       )}
 
-      {/* Stocks — always show, with empty state */}
+      {/* Stocks */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2 px-1">
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -306,7 +270,7 @@ export function AssetOverview() {
           </button>
         </div>
 
-        {cryptoHoldings.length === 0 ? (
+        {(cryptoHoldings ?? []).length === 0 ? (
           <Card className="border-0 shadow-sm">
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">暂无加密货币持仓</p>
@@ -317,7 +281,6 @@ export function AssetOverview() {
           </Card>
         ) : (
           <>
-            {/* Crypto summary */}
             {totalCryptoValue > 0 && (
               <Card className="border-0 shadow-sm mb-2 bg-amber-50/50">
                 <CardContent className="p-3">
@@ -335,9 +298,9 @@ export function AssetOverview() {
             )}
             <Card className="border-0 shadow-sm overflow-hidden">
               <CardContent className="p-0">
-                {cryptoHoldings.map((h, i) => {
-                  const price = cryptoPrices[h.symbol]?.usd || 0;
-                  const change24h = cryptoPrices[h.symbol]?.usd_24h_change || 0;
+                {(cryptoHoldings ?? []).map((h, i) => {
+                  const price = cryptoPrices?.[h.symbol]?.usd || 0;
+                  const change24h = cryptoPrices?.[h.symbol]?.usd_24h_change || 0;
                   const value = price * Number(h.quantity);
                   const cost = Number(h.buy_price) * Number(h.quantity);
                   const pnl = value - cost;
@@ -380,7 +343,7 @@ export function AssetOverview() {
         )}
       </div>
 
-      {/* Exchange Rates — always based on 1 USD */}
+      {/* Exchange Rates */}
       {usdRates && (
         <Card className="mb-4 border-0 shadow-sm">
           <CardContent className="p-4">

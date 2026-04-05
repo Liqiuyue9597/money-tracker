@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { supabase, type Transaction, type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
-import { getExchangeRates, type ExchangeRates } from "@/lib/exchange";
-import { getStockQuotes } from "@/lib/stocks";
-import type { StockHolding } from "@/lib/supabase";
-import { format, startOfMonth, endOfMonth } from "date-fns";
+import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { useMonthTransactions, useStockHoldings, useStockQuotes, useExchangeRates } from "@/lib/swr-hooks";
+import { format } from "date-fns";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -22,102 +20,57 @@ import {
 
 export function Dashboard() {
   const { user, mainCurrency, accounts } = useApp();
-  const [monthExpense, setMonthExpense] = useState(0);
-  const [monthIncome, setMonthIncome] = useState(0);
-  const [topCategories, setTopCategories] = useState<
-    { name: string; icon: string; amount: number }[]
-  >([]);
-  const [stockValue, setStockValue] = useState(0);
-  const [stockPnL, setStockPnL] = useState(0);
-  const [rates, setRates] = useState<ExchangeRates | null>(null);
-  const [usdRates, setUsdRates] = useState<ExchangeRates | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [recentTransactions, setRecentTransactions] = useState<
-    (Transaction & {
-      categories?: { name: string; icon: string } | null;
-      accounts?: { name: string; icon: string } | null;
-    })[]
-  >([]);
+  const now = useMemo(() => new Date(), []);
 
-  useEffect(() => {
-    if (user) loadDashboard();
-  }, [user, mainCurrency]);
+  // SWR hooks — cached & deduplicated across components
+  const { data: transactions, isLoading: txLoading } = useMonthTransactions(user?.id, now);
+  const { data: holdings } = useStockHoldings(user?.id);
+  const stockSymbols = useMemo(() => holdings ? [...new Set(holdings.map((h) => h.symbol))] : [], [holdings]);
+  const { data: quotes } = useStockQuotes(stockSymbols);
+  const { data: usdRates } = useExchangeRates("USD");
 
-  async function loadDashboard() {
-    if (!user) return;
-    setLoading(true);
-    const now = new Date();
-    const mStart = format(startOfMonth(now), "yyyy-MM-dd");
-    const mEnd = format(endOfMonth(now), "yyyy-MM-dd");
-
-    const [txRes, stockRes, ratesData, usdRatesData] = await Promise.all([
-      supabase
-        .from("transactions")
-        .select("*, categories(name, icon), accounts(name, icon)")
-        .eq("user_id", user.id)
-        .gte("date", mStart)
-        .lte("date", mEnd)
-        .order("date", { ascending: false })
-        .order("created_at", { ascending: false }),
-      supabase.from("stock_holdings").select("*").eq("user_id", user.id),
-      getExchangeRates(mainCurrency).catch(() => null),
-      getExchangeRates("USD").catch(() => null),
-    ]);
-
-    if (ratesData) setRates(ratesData);
-    if (usdRatesData) setUsdRates(usdRatesData);
-
-    if (txRes.data) {
-      let exp = 0;
-      let inc = 0;
-      const catMap: Record<string, { name: string; icon: string; amount: number }> = {};
-      for (const t of txRes.data) {
-        const amt = Number(t.amount);
-        if (t.type === "expense") {
-          exp += amt;
-          const catName = t.categories?.name || "其他";
-          const catIcon = t.categories?.icon || "📌";
-          if (!catMap[catName])
-            catMap[catName] = { name: catName, icon: catIcon, amount: 0 };
-          catMap[catName].amount += amt;
-        } else {
-          inc += amt;
-        }
-      }
-      setMonthExpense(exp);
-      setMonthIncome(inc);
-      setTopCategories(
-        Object.values(catMap)
-          .sort((a, b) => b.amount - a.amount)
-          .slice(0, 5)
-      );
-      setRecentTransactions(txRes.data.slice(0, 5));
-    }
-
-    if (stockRes.data && stockRes.data.length > 0) {
-      try {
-        const symbols = [...new Set(stockRes.data.map((s: StockHolding) => s.symbol))];
-        const quotes = await getStockQuotes(symbols);
-        let totalVal = 0,
-          totalCost = 0;
-        for (const h of stockRes.data as StockHolding[]) {
-          const q = quotes[h.symbol];
-          const cost = Number(h.buy_price) * Number(h.quantity);
-          totalCost += cost;
-          totalVal += q ? q.price * Number(h.quantity) : cost;
-        }
-        setStockValue(totalVal);
-        setStockPnL(totalVal - totalCost);
-      } catch (err) {
-        console.error("Failed to load stock quotes:", err);
+  // Derive monthly stats
+  const { monthExpense, monthIncome, topCategories, recentTransactions } = useMemo(() => {
+    if (!transactions) return { monthExpense: 0, monthIncome: 0, topCategories: [], recentTransactions: [] };
+    let exp = 0, inc = 0;
+    const catMap: Record<string, { name: string; icon: string; amount: number }> = {};
+    for (const t of transactions) {
+      const amt = Number(t.amount);
+      if (t.type === "expense") {
+        exp += amt;
+        const catName = t.categories?.name || "\u5176\u4ed6";
+        const catIcon = t.categories?.icon || "\ud83d\udccc";
+        if (!catMap[catName]) catMap[catName] = { name: catName, icon: catIcon, amount: 0 };
+        catMap[catName].amount += amt;
+      } else {
+        inc += amt;
       }
     }
-    setLoading(false);
-  }
+    return {
+      monthExpense: exp,
+      monthIncome: inc,
+      topCategories: Object.values(catMap).sort((a, b) => b.amount - a.amount).slice(0, 5),
+      recentTransactions: transactions.slice(0, 5),
+    };
+  }, [transactions]);
+
+  // Derive stock totals
+  const { stockValue, stockPnL } = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockPnL: 0 };
+    let totalVal = 0, totalCost = 0;
+    for (const h of holdings) {
+      const q = quotes[h.symbol];
+      const cost = Number(h.buy_price) * Number(h.quantity);
+      totalCost += cost;
+      totalVal += q ? q.price * Number(h.quantity) : cost;
+    }
+    return { stockValue: totalVal, stockPnL: totalVal - totalCost };
+  }, [holdings, quotes]);
 
   const net = monthIncome - monthExpense;
 
-  if (loading) {
+  // Only show full-page spinner on very first load (no cached data yet)
+  if (txLoading && !transactions) {
     return (
       <div className="flex items-center justify-center py-24">
         <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -333,7 +286,7 @@ export function Dashboard() {
                 <div key={t.id} className="flex items-start justify-between">
                   <div className="flex items-start gap-2.5">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-lg">
-                      {t.categories?.icon || "📌"}
+                      {t.categories?.icon || "\ud83d\udccc"}
                     </div>
                     <div>
                       <p className="text-sm font-medium">

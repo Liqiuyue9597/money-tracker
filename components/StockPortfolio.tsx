@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type StockHolding, type Currency, type StockAssetType, CURRENCIES } from "@/lib/supabase";
+import { useStockHoldings, useStockQuotes } from "@/lib/swr-hooks";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,11 +29,14 @@ function getTypeLabel(type: StockAssetType): string {
 
 export function StockPortfolio() {
   const { user } = useApp();
-  const [holdings, setHoldings] = useState<StockHolding[]>([]);
-  const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
+
+  // SWR hooks
+  const { data: holdings = [], isLoading: loading, mutate: mutateHoldings } = useStockHoldings(user?.id);
+  const stockSymbols = useMemo(() => [...new Set(holdings.map((h) => h.symbol))], [holdings]);
+  const { data: quotes = {}, mutate: mutateQuotes, isValidating: refreshing } = useStockQuotes(stockSymbols);
+
+  // Local-only state
   const [manualPrices, setManualPrices] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Form states
@@ -49,41 +53,15 @@ export function StockPortfolio() {
   const [editPrice, setEditPrice] = useState("");
   const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    if (user) loadHoldings();
-  }, [user]);
-
-  async function loadHoldings() {
-    if (!user) return;
-    setLoading(true);
-    const { data } = await supabase
-      .from("stock_holdings")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (data) {
-      setHoldings(data);
-      if (data.length > 0) {
-        await refreshQuotes(data);
-      }
-    }
-    setLoading(false);
-  }
-
-  const refreshQuotes = useCallback(async (h?: StockHolding[]) => {
-    const list = h || holdings;
-    if (list.length === 0) return;
-    setRefreshing(true);
+  async function handleRefreshQuotes() {
+    if (stockSymbols.length === 0) return;
     try {
-      const symbols = [...new Set(list.map((s) => s.symbol))];
-      const data = await getStockQuotes(symbols);
-      setQuotes(data);
+      const data = await getStockQuotes(stockSymbols);
+      mutateQuotes(data, { revalidate: false });
     } catch {
       toast.error("获取行情失败");
     }
-    setRefreshing(false);
-  }, [holdings]);
+  }
 
   async function handleAdd() {
     if (!user || !symbol || !buyPrice || !quantity) {
@@ -115,7 +93,7 @@ export function StockPortfolio() {
         setHoldingType("us");
         setCurrency("USD");
         setDialogOpen(false);
-        loadHoldings();
+        mutateHoldings(); // SWR revalidate
       }
     } finally {
       setAdding(false);
@@ -125,7 +103,11 @@ export function StockPortfolio() {
   async function handleDelete(id: string) {
     if (!confirm("删除这个持仓？")) return;
     await supabase.from("stock_holdings").delete().eq("id", id);
-    setHoldings((prev) => prev.filter((h) => h.id !== id));
+    // Optimistic update
+    mutateHoldings(
+      (prev) => prev?.filter((h) => h.id !== id),
+      { revalidate: false }
+    );
   }
 
   function openEditDialog(sym: string, currentPrice: number) {
@@ -162,7 +144,6 @@ export function StockPortfolio() {
     };
 
     holdings.forEach((h) => {
-      // Use asset_type from database, fallback to symbol-based detection
       const type = h.asset_type || (() => {
         if (h.symbol.length === 6 && /^\d{6}$/.test(h.symbol)) return "fund";
         if (h.symbol.endsWith(".HK")) return "hk";
@@ -171,7 +152,6 @@ export function StockPortfolio() {
       groups[type].push(h);
     });
 
-    // Sort each group: by created_at descending (newest first)
     Object.keys(groups).forEach((key) => {
       groups[key as StockAssetType].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -202,7 +182,6 @@ export function StockPortfolio() {
     return totals;
   }, [groupedHoldings, quotes, manualPrices]);
 
-  /** Calculate total portfolio values */
   const totalCost = useMemo(() =>
     Object.values(typeTotals).reduce((sum, t) => sum + t.cost, 0),
     [typeTotals]
@@ -216,7 +195,6 @@ export function StockPortfolio() {
   const totalPnL = totalValue - totalCost;
   const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
 
-  // Order: fund → hk → us
   const types: StockAssetType[] = ["fund", "hk", "us"];
 
   return (
@@ -228,7 +206,7 @@ export function StockPortfolio() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refreshQuotes()}
+            onClick={handleRefreshQuotes}
             disabled={refreshing}
             className="rounded-xl"
           >
@@ -251,7 +229,6 @@ export function StockPortfolio() {
                       key={type}
                       onClick={() => {
                         setHoldingType(type);
-                        // Auto-set default currency based on type (but still allow changes)
                         switch (type) {
                           case "fund": setCurrency("CNY"); break;
                           case "hk": setCurrency("HKD"); break;
@@ -365,7 +342,7 @@ export function StockPortfolio() {
       )}
 
       {/* Holdings List - Grouped by Type */}
-      {loading ? (
+      {loading && holdings.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">加载中...</div>
       ) : holdings.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
