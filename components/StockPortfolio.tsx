@@ -35,8 +35,6 @@ export function StockPortfolio() {
   const stockSymbols = useMemo(() => [...new Set(holdings.map((h) => h.symbol))], [holdings]);
   const { data: quotes = {}, mutate: mutateQuotes, isValidating: refreshing } = useStockQuotes(stockSymbols);
 
-  // Local-only state
-  const [manualPrices, setManualPrices] = useState<Record<string, number>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Form states
@@ -116,24 +114,55 @@ export function StockPortfolio() {
     setEditDialogOpen(true);
   }
 
-  function handleManualPriceSave() {
+  async function handleManualPriceSave() {
     const price = parseFloat(editPrice);
     if (!editSymbol || isNaN(price) || price <= 0) {
       toast.error("请输入有效的价格");
       return;
     }
-    setManualPrices((prev) => ({ ...prev, [editSymbol]: price }));
-    setEditDialogOpen(false);
-    toast.success(`已手动更新 ${editSymbol} 价格为 ${price}`);
+
+    // Find all holdings with this symbol and update their manual_price in DB
+    const holdingIds = holdings.filter((h) => h.symbol === editSymbol).map((h) => h.id);
+    if (holdingIds.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("stock_holdings")
+        .update({ manual_price: price, manual_price_updated_at: new Date().toISOString() })
+        .in("id", holdingIds);
+
+      if (error) {
+        toast.error("保存价格失败: " + error.message);
+        return;
+      }
+
+      // Optimistic update via SWR
+      mutateHoldings(
+        (prev) =>
+          prev?.map((h) =>
+            holdingIds.includes(h.id)
+              ? { ...h, manual_price: price, manual_price_updated_at: new Date().toISOString() }
+              : h
+          ),
+        { revalidate: false }
+      );
+      setEditDialogOpen(false);
+      toast.success(`已保存 ${editSymbol} 价格为 ${price}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("保存价格失败");
+    }
   }
 
-  /** Get effective price for a symbol: API quote > manual price > 0 */
-  function getEffectivePrice(sym: string): number {
+  /** Get effective price for a symbol: API quote > manual price (from DB) > 0 */
+  const getEffectivePrice = useCallback((sym: string): number => {
     const quote = quotes[sym];
     if (quote && quote.price > 0) return quote.price;
-    if (manualPrices[sym]) return manualPrices[sym];
+    // Fall back to manual_price from DB
+    const holding = holdings.find((h) => h.symbol === sym);
+    if (holding?.manual_price != null && holding.manual_price > 0) return holding.manual_price;
     return 0;
-  }
+  }, [quotes, holdings]);
 
   /** Group holdings by asset_type and sort by created_at */
   const groupedHoldings = useMemo(() => {
@@ -180,7 +209,7 @@ export function StockPortfolio() {
     });
 
     return totals;
-  }, [groupedHoldings, quotes, manualPrices]);
+  }, [groupedHoldings, getEffectivePrice]);
 
   const totalCost = useMemo(() =>
     Object.values(typeTotals).reduce((sum, t) => sum + t.cost, 0),
@@ -385,7 +414,7 @@ export function StockPortfolio() {
                   const individualPnL = value - cost;
                   const individualPnLPct = cost > 0 ? (individualPnL / cost) * 100 : 0;
                   const isFund = type === "fund";
-                  const isManual = !quote?.price && manualPrices[h.symbol] !== undefined;
+                  const isManual = !quote?.price && h.manual_price != null && h.manual_price > 0;
 
                   return (
                     <Card key={h.id} className="border-0 shadow-sm overflow-hidden">
@@ -476,7 +505,7 @@ export function StockPortfolio() {
               autoFocus
             />
             <p className="text-xs text-muted-foreground">
-              手动输入的价格仅在本次会话有效，刷新页面后会重新从 API 获取。
+              手动输入的价格会保存到数据库，刷新页面后仍然有效。当 API 能获取到实时行情时，将优先使用实时价格。
             </p>
             <Button onClick={handleManualPriceSave} className="w-full rounded-xl">
               确认更新

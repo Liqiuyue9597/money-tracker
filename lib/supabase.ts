@@ -44,6 +44,8 @@ export interface CryptoHolding {
   buy_price: number;
   buy_date: string;
   notes: string;
+  manual_price: number | null;
+  manual_price_updated_at: string | null;
   created_at: string;
 }
 
@@ -88,6 +90,8 @@ export interface StockHolding {
   currency: Currency;
   notes: string;
   asset_type: StockAssetType;
+  manual_price: number | null;
+  manual_price_updated_at: string | null;
   created_at: string;
 }
 
