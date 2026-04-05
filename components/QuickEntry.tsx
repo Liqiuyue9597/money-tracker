@@ -161,13 +161,13 @@ export function QuickEntry() {
               setAccountId(acc.id);
               setCurrency(acc.currency);
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shrink-0 transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium shrink-0 transition-all ${
               accountId === acc.id
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground"
             }`}
           >
-            <span>{acc.icon}</span>
+            <span className="text-base">{acc.icon}</span>
             {acc.name}
           </button>
         ))}
@@ -218,7 +218,7 @@ export function QuickEntry() {
       </div>
 
       {/* Keypad */}
-      <div className="mt-auto px-4 pt-3 pb-2 border-t">
+      <div className="mt-auto px-4 pt-3 pb-20 border-t">
         <div className="grid grid-cols-3 gap-1.5">
           {keypadKeys.map((key) => (
             <button
