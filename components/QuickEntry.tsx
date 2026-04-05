@@ -108,9 +108,9 @@ export function QuickEntry() {
   ];
 
   return (
-    <div className="flex flex-col h-full max-w-lg mx-auto">
+    <div className="flex flex-col max-w-lg mx-auto">
       {/* Type toggle */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
         <div className="flex rounded-xl bg-muted p-1 gap-1">
           <button
             onClick={() => {
@@ -174,7 +174,7 @@ export function QuickEntry() {
       </div>
 
       {/* Amount */}
-      <div className="px-4 py-6 text-center">
+      <div className="px-4 py-4 text-center">
         <div
           className={`text-5xl font-bold tabular-nums ${
             type === "income" ? "text-emerald-600" : "text-foreground"
@@ -218,7 +218,7 @@ export function QuickEntry() {
       </div>
 
       {/* Keypad */}
-      <div className="mt-auto px-4 pt-3 pb-20 border-t">
+      <div className="px-4 pt-3 pb-[calc(5rem+env(safe-area-inset-bottom))] border-t">
         <div className="grid grid-cols-3 gap-1.5">
           {keypadKeys.map((key) => (
             <button

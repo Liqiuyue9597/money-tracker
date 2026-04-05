@@ -12,8 +12,8 @@ export default function QuickPage() {
   if (!user) return <AuthForm />;
 
   return (
-    <main className="flex flex-col h-screen">
-      <div className="flex-1 overflow-auto pb-20">
+    <main className="min-h-screen flex flex-col">
+      <div className="flex-1 overflow-auto">
         <QuickEntry />
       </div>
       <BottomNav />
