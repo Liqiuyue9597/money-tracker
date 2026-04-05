@@ -76,7 +76,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
     setSaving(true);
     const type: AccountType = "cash";
     if (editAccount) {
-      const { error } = await supabase.from("accounts").update({ name: name.trim(), type: editAccount.type, currency, icon, exclude_from_total: excludeFromTotal }).eq("id", editAccount.id);
+      const { error } = await supabase.from("accounts").update({ name: name.trim(), type: editAccount.type, currency, icon, balance: parseFloat(initialBalance) ?? 0, exclude_from_total: excludeFromTotal }).eq("id", editAccount.id);
       if (error) toast.error("更新失败"); else { toast.success("已更新"); refreshAccounts(); onOpenChange(false); }
     } else {
       const { error } = await supabase.from("accounts").insert({ user_id: user.id, name: name.trim(), type, currency, icon, balance: parseFloat(initialBalance) || 0, sort_order: 99, exclude_from_total: excludeFromTotal });
@@ -223,19 +223,22 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
             </button>
           </label>
 
-          {!editAccount && (
-            <div>
-              <div className="section-label mb-2">初始余额</div>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
-                step="0.01"
-                className="input-minimal w-full font-mono"
-              />
+          <div>
+            <div className="section-label mb-2">
+              {editAccount ? "调整余额" : "初始余额"}
+              {editAccount && (
+                <span className="text-[11px] text-[#A8A29E] ml-2">直接修改当前余额</span>
+              )}
             </div>
-          )}
+            <input
+              type="number"
+              placeholder="0.00"
+              value={initialBalance}
+              onChange={(e) => setInitialBalance(e.target.value)}
+              step="0.01"
+              className="input-minimal w-full font-mono"
+            />
+          </div>
 
           <button
             onClick={handleSave}
