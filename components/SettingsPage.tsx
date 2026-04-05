@@ -6,12 +6,37 @@ import { supabase, type Currency, type TransactionType, type Category, CURRENCIE
 import { CategoryManager } from "@/components/CategoryManager";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Trash2 } from "lucide-react";
 
 export function SettingsPage() {
-  const { user, mainCurrency, setMainCurrency, categories, signOut } = useApp();
+  const { user, mainCurrency, setMainCurrency, categories, refreshCategories, signOut } = useApp();
   const [catTab, setCatTab] = useState<TransactionType>("expense");
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
+  async function handleDeleteCategory(cat: Category) {
+    if (cat.usage_count > 0) {
+      toast.error(`该分类已有 ${cat.usage_count} 笔记录，无法删除`);
+      return;
+    }
+    if (!confirm(`删除分类「${cat.name}」？`)) return;
+    try {
+      const { error } = await supabase
+        .from("categories")
+        .delete()
+        .eq("id", cat.id);
+      if (error) {
+        toast.error("删除失败");
+        console.error(error);
+      } else {
+        toast.success("已删除");
+        await refreshCategories();
+      }
+    } catch (err) {
+      toast.error("删除失败");
+      console.error(err);
+    }
+  }
 
   async function handleExportCSV() {
     if (!user) return;
@@ -130,21 +155,36 @@ export function SettingsPage() {
           {categories
             .filter((c) => c.type === catTab)
             .map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => {
-                  setEditingCategory(cat);
-                  setCatDialogOpen(true);
-                }}
-                className="flex w-full items-center gap-3 py-2.5 text-[14px] hover:bg-[#F0EFED] rounded-lg px-2 transition-colors"
-              >
-                <span className="text-[18px]">{cat.icon}</span>
-                <span className="flex-1 text-left">{cat.name}</span>
-                {cat.usage_count > 0 && (
-                  <span className="text-[11px] text-[#A8A29E] tabular-nums">{cat.usage_count} 笔</span>
-                )}
-                <span className="text-[#C4BDB4]">→</span>
-              </button>
+              <div key={cat.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    setEditingCategory(cat);
+                    setCatDialogOpen(true);
+                  }}
+                  className="flex flex-1 items-center gap-3 py-2.5 text-[14px] hover:bg-[#F0EFED] rounded-lg px-2 transition-colors"
+                >
+                  <span className="text-[18px]">{cat.icon}</span>
+                  <span className="flex-1 text-left">{cat.name}</span>
+                  {cat.usage_count > 0 && (
+                    <span className="text-[11px] text-[#A8A29E] tabular-nums">{cat.usage_count} 笔</span>
+                  )}
+                  <span className="text-[#C4BDB4]">→</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteCategory(cat);
+                  }}
+                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                    cat.usage_count > 0
+                      ? "text-[#D4D0CC] cursor-not-allowed"
+                      : "text-[#A8A29E] hover:text-red-500 hover:bg-red-50"
+                  }`}
+                  title={cat.usage_count > 0 ? `已有 ${cat.usage_count} 笔记录，无法删除` : "删除分类"}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             ))}
         </div>
 
