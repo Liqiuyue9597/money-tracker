@@ -399,8 +399,13 @@ export function StockPortfolio() {
                     {items.length}
                   </Badge>
                 </div>
-                <div className={`text-xs font-semibold tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                  {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                <div className="text-right">
+                  <div className="text-sm font-semibold tabular-nums">
+                    {CURRENCIES[items[0]?.currency || "CNY"].symbol}{totals.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className={`text-[10px] font-semibold tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                  </div>
                 </div>
               </div>
 
@@ -443,7 +448,10 @@ export function StockPortfolio() {
                             {currentPrice > 0 ? (
                               <>
                                 <div className="font-bold tabular-nums text-sm">
-                                  {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
+                                  {CURRENCIES[h.currency].symbol}{value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground tabular-nums">
+                                  单价 {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
                                 </div>
                                 <div
                                   className={`text-xs font-semibold tabular-nums ${
