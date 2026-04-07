@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
 import { useMonthTransactions, useStockHoldings, useStockQuotes, useExchangeRates } from "@/lib/swr-hooks";
+import { convertCurrency } from "@/lib/exchange";
 import { format } from "date-fns";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +29,8 @@ export function Dashboard() {
   const stockSymbols = useMemo(() => holdings ? [...new Set(holdings.map((h) => h.symbol))] : [], [holdings]);
   const { data: quotes } = useStockQuotes(stockSymbols);
   const { data: usdRates } = useExchangeRates("USD");
+  const { data: rates } = useExchangeRates(mainCurrency);
+  const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
 
   // Derive monthly stats
   const { monthExpense, monthIncome, topCategories, recentTransactions } = useMemo(() => {
@@ -54,18 +57,20 @@ export function Dashboard() {
     };
   }, [transactions]);
 
-  // Derive stock totals
+  // Derive stock totals (converted to mainCurrency per holding)
   const { stockValue, stockCost, stockPnL } = useMemo(() => {
     if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockPnL: 0 };
     let totalVal = 0, totalCost = 0;
     for (const h of holdings) {
       const q = quotes[h.symbol];
+      const cur = (h.currency || "USD") as Currency;
       const cost = Number(h.buy_price) * Number(h.quantity);
-      totalCost += cost;
-      totalVal += q ? q.price * Number(h.quantity) : cost;
+      const val = q ? q.price * Number(h.quantity) : cost;
+      totalCost += convertCurrency(cost, cur, mainCurrency, rateMap);
+      totalVal += convertCurrency(val, cur, mainCurrency, rateMap);
     }
     return { stockValue: totalVal, stockCost: totalCost, stockPnL: totalVal - totalCost };
-  }, [holdings, quotes]);
+  }, [holdings, quotes, mainCurrency, rateMap]);
 
   const net = monthIncome - monthExpense;
 
@@ -195,14 +200,10 @@ export function Dashboard() {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-xl font-bold tabular-nums">
-                  $
-                  {stockValue.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatMoney(stockValue, mainCurrency)}
                 </p>
                 <p className="text-[10px] text-muted-foreground tabular-nums">
-                  成本 ${stockCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  成本 {formatMoney(stockCost, mainCurrency)}
                 </p>
               </div>
               <div className="text-right">
@@ -211,8 +212,7 @@ export function Dashboard() {
                     stockPnL >= 0 ? "text-emerald-600" : "text-red-600"
                   }`}
                 >
-                  {stockPnL >= 0 ? "+" : ""}
-                  ${Math.abs(stockPnL).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {stockPnL >= 0 ? "+" : ""}{formatMoney(stockPnL, mainCurrency)}
                 </span>
                 {stockCost > 0 && (
                   <p className={`text-[10px] font-medium tabular-nums ${stockPnL >= 0 ? "text-emerald-600" : "text-red-600"}`}>

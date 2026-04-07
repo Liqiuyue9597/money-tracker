@@ -46,27 +46,29 @@ export function AssetOverview() {
   const [addingCrypto, setAddingCrypto] = useState(false);
 
   const loading = !holdings && !cryptoHoldings;
+  const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
 
-  // Derive stock totals
-  const { stockValue, stockCost, stockCurrency, stockPnl, stockPnlPct } = useMemo(() => {
-    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockCurrency: "USD" as Currency, stockPnl: 0, stockPnlPct: 0 };
+  // Derive stock totals (converted to mainCurrency per holding)
+  const { stockValue, stockCost, stockPnl, stockPnlPct } = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockPnl: 0, stockPnlPct: 0 };
     let totalVal = 0, totalCost = 0;
     for (const h of holdings) {
       const q = quotes[h.symbol];
+      const cur = (h.currency || "USD") as Currency;
       const cost = Number(h.buy_price) * Number(h.quantity);
-      totalCost += cost;
-      totalVal += q ? q.price * Number(h.quantity) : cost;
+      const val = q ? q.price * Number(h.quantity) : cost;
+      totalCost += convertCurrency(cost, cur, mainCurrency, rateMap);
+      totalVal += convertCurrency(val, cur, mainCurrency, rateMap);
     }
     const pnl = totalVal - totalCost;
     const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
-    return { stockValue: totalVal, stockCost: totalCost, stockCurrency: (holdings[0]?.currency || "USD") as Currency, stockPnl: pnl, stockPnlPct: pnlPct };
-  }, [holdings, quotes]);
+    return { stockValue: totalVal, stockCost: totalCost, stockPnl: pnl, stockPnlPct: pnlPct };
+  }, [holdings, quotes, mainCurrency, rateMap]);
 
   // Cash accounts split
   const cashAccounts = useMemo(() => accounts.filter((a) => a.type === "cash"), [accounts]);
   const positiveAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) >= 0), [cashAccounts]);
   const negativeAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) < 0), [cashAccounts]);
-  const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
 
   // Crypto totals
   const { totalCryptoValue, totalCryptoCost } = useMemo(() => {
@@ -87,10 +89,10 @@ export function AssetOverview() {
         netWorth += convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
       }
     }
-    if (stockValue > 0) netWorth += convertCurrency(stockValue, stockCurrency, mainCurrency, rateMap);
+    if (stockValue > 0) netWorth += stockValue; // already in mainCurrency
     if (totalCryptoValue > 0) netWorth += convertCurrency(totalCryptoValue, "USD", mainCurrency, rateMap);
     return netWorth;
-  }, [accounts, mainCurrency, rateMap, stockValue, stockCurrency, totalCryptoValue]);
+  }, [accounts, mainCurrency, rateMap, stockValue, totalCryptoValue]);
 
   async function handleAddCrypto() {
     if (!user || !cryptoQty || !cryptoBuyPrice) { toast.error("请填写完整"); return; }
@@ -240,13 +242,13 @@ export function AssetOverview() {
                   <div className="flex-1 text-left">
                     <div className="text-sm font-medium">股票组合</div>
                     <div className="text-[10px] text-muted-foreground tabular-nums">
-                      成本 {formatMoney(stockCost, stockCurrency)}
+                      成本 {formatMoney(stockCost, mainCurrency)}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, stockCurrency)}</div>
+                    <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, mainCurrency)}</div>
                     <div className={`text-[10px] font-medium tabular-nums ${stockPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {stockPnl >= 0 ? "+" : ""}{formatMoney(stockPnl, stockCurrency)} ({stockPnl >= 0 ? "+" : ""}{stockPnlPct.toFixed(1)}%)
+                      {stockPnl >= 0 ? "+" : ""}{formatMoney(stockPnl, mainCurrency)} ({stockPnl >= 0 ? "+" : ""}{stockPnlPct.toFixed(1)}%)
                     </div>
                   </div>
                 </div>
