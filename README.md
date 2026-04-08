@@ -1,262 +1,99 @@
-# Portfolio Data Calculation Analysis - Complete Documentation
+# MoneyTracker
 
-This analysis thoroughly explores how investment portfolio data is calculated and displayed in the money-tracker app, focusing on the discrepancies between different pages.
+个人记账 PWA 应用，支持多账户、多币种、股票和加密货币追踪。无广告，通过 iOS 快捷指令可实现快捷记账。
 
-## 📚 Documentation Files
+- **线上地址**: https://money-tracker-pied-one.vercel.app
+- **技术栈**: Next.js 16 + TypeScript + Tailwind CSS v4 + shadcn/ui + Supabase
 
-### 1. **FINDINGS_SUMMARY.md** - START HERE
-The executive summary with:
-- Clear problem statement
-- Root cause identification
-- Specific calculation examples
-- Impact assessment
-- Exact fixes needed
+## 功能
 
-**Read this first for a quick understanding of the issue.**
+- 多账户管理（银行卡、信用卡、微信、支付宝等）
+- 多币种支持（CNY / USD / HKD）+ 实时汇率
+- 股票持仓追踪（Yahoo Finance 实时行情）
+- 加密货币持仓追踪（CoinGecko 实时价格）
+- 按月/按日分组的账单列表，支持搜索
+- 年度报告（趋势图、分类构成、储蓄率）
+- iOS 快捷指令快捷记账
+- Google OAuth + 邮箱密码登录
 
-### 2. **portfolio_analysis.md** - DETAILED DEEP DIVE
-Comprehensive technical analysis including:
-- Detailed code for each component (AssetOverview, StockPortfolio, Dashboard)
-- Crypto portfolio calculation logic
-- Data flow from API calls to display
-- Currency conversion dependencies
-- Manual price handling inconsistencies
-- Complete recommendations
+## 快速开始
 
-**Read this for technical details and comprehensive understanding.**
+```bash
+# 安装依赖
+npm install
 
-### 3. **side_by_side_comparison.md** - CODE COMPARISON
-Direct code comparison showing:
-- Side-by-side code for all three components
-- What each component has and is missing
-- Data dependency matrix
-- Price fallback logic comparison
-- Practical mixed-portfolio example
+# 配置环境变量
+cp .env.local.example .env.local
+# 填入 Supabase URL 和 Anon Key
 
-**Read this to understand exactly what's different in the code.**
+# 本地开发
+npm run dev
 
-### 4. **visual_flowchart.txt** - ARCHITECTURE DIAGRAM
-ASCII flowcharts showing:
-- Complete data flow from sources to display
-- Calculation layer comparison
-- Display layer output
-- Currency conversion example
-- Dependency tree
+# 构建检查
+npm run build
 
-**Read this for visual understanding of the system architecture.**
-
-### 5. **code_locations.txt** - EXACT REFERENCES
-Line-by-line reference with:
-- Exact file names and line numbers
-- What's correct and what's broken
-- Critical differences highlighted
-- Summary of key locations
-
-**Use this as a reference when fixing the code.**
-
----
-
-## 🎯 Quick Summary
-
-### The Problem
-Three different components display stock portfolio totals:
-- **AssetOverview.tsx** (`/assets` page) - ✅ Shows correct value
-- **StockPortfolio.tsx** (`/stocks` page) - ❌ Shows WRONG value
-- **Dashboard.tsx** (home page) - ✅ Shows correct value
-
-### The Root Cause
-**StockPortfolio.tsx doesn't convert currencies before summing** mixed-currency holdings together.
-
-### Real Example
-Portfolio with:
-- 1 US stock AAPL @ $150
-- 1 Chinese fund @ ¥1.50  
-- 1 HK stock @ HK$55
-
-**What should be shown (converted to CNY):** ¥1114.75 ✅
-**What StockPortfolio shows:** $206.50 ❌
-
-**The discrepancy: 5.4x off!**
-
----
-
-## 🔍 What's Missing in StockPortfolio
-
-```typescript
-// ❌ NOT IMPORTED:
-import { useApp } from "@/components/AppProvider";
-import { useExchangeRates } from "@/lib/swr-hooks";
-import { convertCurrency } from "@/lib/exchange";
-
-// ❌ NOT FETCHED:
-const { mainCurrency } = useApp();
-const { data: rates } = useExchangeRates(mainCurrency);
-const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
-
-// ❌ NOT APPLIED:
-// convertCurrency() not used in calculations
+# 部署（push 即自动部署到 Vercel）
+git push
 ```
 
----
-
-## ✅ Where to Focus
-
-### Primary Fix Location
-**File:** `components/StockPortfolio.tsx`  
-**Lines:** 194-222 (calculation loop)  
-**Lines:** 355 (display formatting)  
-
-### Change Summary
-1. Add 3 imports (useApp, useExchangeRates, convertCurrency)
-2. Get mainCurrency and rates
-3. Apply convertCurrency() in the calculation loop
-4. Change display to use formatMoney() instead of hardcoded $
-
-**Estimated time to fix:** 5-10 minutes
-
----
-
-## 🧪 Testing Checklist
-
-After implementing fixes:
-
-- [ ] Create a portfolio with mixed currencies (US + HK + CNY holdings)
-- [ ] Set mainCurrency to CNY
-- [ ] Navigate to `/assets` and verify total value
-- [ ] Navigate to `/stocks` and verify same total value
-- [ ] Navigate to `/` and verify same total value
-- [ ] Change mainCurrency to USD
-- [ ] Repeat all three pages - should show same converted value
-- [ ] Test with manual prices (set price manually in StockPortfolio)
-- [ ] Verify AssetOverview also shows updated manual prices
-
----
-
-## 📊 Affected Areas
-
-1. **User Experience**
-   - Confusion when switching pages
-   - Incorrect portfolio tracking
-   - Inaccurate net worth calculations
-
-2. **Data Integrity**
-   - Portfolio totals don't match across pages
-   - P&L calculations may be incorrect
-   - Investment decisions based on wrong numbers
-
-3. **Components**
-   - AssetOverview: Used for net worth calculation ⚠️
-   - StockPortfolio: Shows wrong detailed breakdown ⚠️
-   - Dashboard: Shows wrong portfolio summary on home page ⚠️
-
----
-
-## 🎓 Key Learning Points
-
-1. **Duplication is dangerous** - Same calculation in 3 places leads to inconsistency
-2. **Multi-currency portfolios need special handling** - Can't just sum values
-3. **Test with realistic data** - This bug is hidden in single-currency portfolios
-4. **Dependencies matter** - mainCurrency and rates must be in useMemo deps
-
----
-
-## 💡 Recommendations
-
-### Immediate
-1. Fix StockPortfolio.tsx (see FINDINGS_SUMMARY.md for exact code)
-2. Add unit tests for mixed-currency portfolios
-3. Test on staging before deploying
-
-### Short Term
-1. Standardize manual price handling across all components
-2. Create reusable `usePortfolioTotals()` hook to eliminate duplication
-
-### Long Term
-1. Consider component extraction for portfolio display
-2. Add integration tests for portfolio consistency
-3. Document multi-currency handling in code comments
-
----
-
-## 📖 How to Use This Documentation
-
-1. **For a quick understanding:** Read FINDINGS_SUMMARY.md (5 minutes)
-2. **For implementation:** Read code_locations.txt + FINDINGS_SUMMARY.md fix section (10 minutes)
-3. **For deep understanding:** Read portfolio_analysis.md (20 minutes)
-4. **For visual learners:** Check visual_flowchart.txt (10 minutes)
-5. **For code review:** Use side_by_side_comparison.md (15 minutes)
-
----
-
-## 🔗 File Structure
+## 环境变量
 
 ```
-Documentation/
-├── README.md                      (this file)
-├── FINDINGS_SUMMARY.md           (executive summary + fixes)
-├── portfolio_analysis.md         (deep technical analysis)
-├── side_by_side_comparison.md    (code comparison)
-├── visual_flowchart.txt          (architecture diagrams)
-└── code_locations.txt            (line references)
-
-Target Code/
-├── components/AssetOverview.tsx  (✅ correct)
-├── components/StockPortfolio.tsx (❌ broken)
-├── components/Dashboard.tsx      (✅ correct)
-├── lib/swr-hooks.ts             (data fetching)
-├── lib/exchange.ts              (currency conversion)
-└── lib/supabase.ts              (types & constants)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
----
+## 项目结构
 
-## 🚀 Implementation Quick Start
+```
+app/
+├── layout.tsx              # 根布局
+├── page.tsx                # 首页 Dashboard
+├── quick/page.tsx          # 快捷记账
+├── transactions/page.tsx   # 账单列表
+├── assets/page.tsx         # 资产总览
+├── stocks/page.tsx         # 股票详情
+├── report/page.tsx         # 年度报告
+├── settings/page.tsx       # 设置
+└── api/
+    ├── stocks/route.ts     # 股票行情代理（输入验证 + 8s 超时）
+    ├── crypto/route.ts     # 加密货币价格代理（输入验证 + 白名单 + 8s 超时）
+    └── exchange/route.ts   # 汇率代理（输入验证 + 按币种独立缓存）
 
-To fix the bug immediately:
+components/
+├── AppProvider.tsx         # 全局 Context（useMemo 优化）
+├── Dashboard.tsx           # 首页概览
+├── QuickEntry.tsx          # 快捷记账
+├── TransactionList.tsx     # 账单列表（useMemo 优化过滤/分组/合计）
+├── AssetOverview.tsx       # 资产总览（useMemo 优化净值计算）
+├── StockPortfolio.tsx      # 股票持仓管理
+├── AccountManager.tsx      # 账户管理对话框
+├── AnnualReport.tsx        # 年度报告
+├── AuthForm.tsx            # 登录注册
+├── BottomNav.tsx           # 底部导航
+├── SettingsPage.tsx        # 设置页
+└── ui/                     # shadcn/ui 组件
 
-```typescript
-// In components/StockPortfolio.tsx
-
-// 1. Add imports at top (after line 7)
-import { useApp } from "@/components/AppProvider";
-import { useExchangeRates } from "@/lib/swr-hooks";
-import { convertCurrency } from "@/lib/exchange";
-
-// 2. Add after line 31
-const { mainCurrency } = useApp();
-
-// 3. Add after line 36
-const { data: rates } = useExchangeRates(mainCurrency);
-const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
-
-// 4. Modify calculation (lines 194-212)
-// Change from: totals[type as StockAssetType].cost += cost;
-// To:
-const cur = (h.currency || "USD") as Currency;
-const costConverted = convertCurrency(cost, cur, mainCurrency, rateMap);
-totals[type as StockAssetType].cost += costConverted;
-
-// And similarly for value
-
-// 5. Fix display (line 355)
-// Change from: ${totalValue.toLocaleString(...)}
-// To: {formatMoney(totalValue, mainCurrency)}
+lib/
+├── supabase.ts             # Supabase 客户端 + 类型定义
+├── stocks.ts               # 股票行情封装
+├── crypto.ts               # 加密货币价格封装
+├── exchange.ts             # 汇率获取 + 货币转换（Map 缓存）
+└── utils.ts                # cn() 工具
 ```
 
----
+## API 安全
 
-## ❓ Questions?
+所有 API 路由均实现：
+- **输入验证** — 长度限制 + 正则校验，拒绝非法字符
+- **请求超时** — 8 秒 AbortSignal，超时返回 504
+- **优雅降级** — 外部 API 不可用时返回 503（而非虚假数据），优先使用过期缓存兜底
+- **缓存策略** — 汇率 1 小时（按币种独立 Map 缓存），股票/加密货币 5 分钟
 
-Refer back to the specific documentation file:
-- **"Why is this happening?"** → FINDINGS_SUMMARY.md
-- **"How does the code work?"** → portfolio_analysis.md
-- **"What's the exact difference?"** → side_by_side_comparison.md
-- **"Where is the bug?"** → code_locations.txt
-- **"How should data flow?"** → visual_flowchart.txt
+## 部署
 
----
+项目通过 Vercel 自动部署，`git push` 即生效。也可手动部署：
 
-**Analysis completed:** 2026-04-08  
-**Status:** Ready for implementation  
-**Priority:** High (affects core functionality)
-
+```bash
+vercel --prod
+```
