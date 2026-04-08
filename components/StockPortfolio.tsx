@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { supabase, type StockHolding, type Currency, type StockAssetType, CURRENCIES } from "@/lib/supabase";
-import { useStockHoldings, useStockQuotes } from "@/lib/swr-hooks";
+import { supabase, type StockHolding, type Currency, type StockAssetType, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { useStockHoldings, useStockQuotes, useExchangeRates } from "@/lib/swr-hooks";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
+import { convertCurrency } from "@/lib/exchange";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,12 +29,21 @@ function getTypeLabel(type: StockAssetType): string {
 }
 
 export function StockPortfolio() {
-  const { user } = useApp();
+  const { user, mainCurrency } = useApp();
 
   // SWR hooks
   const { data: holdings = [], isLoading: loading, mutate: mutateHoldings } = useStockHoldings(user?.id);
   const stockSymbols = useMemo(() => [...new Set(holdings.map((h) => h.symbol))], [holdings]);
   const { data: quotes = {}, mutate: mutateQuotes, isValidating: refreshing } = useStockQuotes(stockSymbols);
+  const { data: rates } = useExchangeRates(mainCurrency);
+
+  // Build rate map for convertCurrency
+  const rateMap = useMemo(() => {
+    if (!rates?.rates) {
+      return { CNY: 1, USD: 0.137, HKD: 1.07 };
+    }
+    return rates.rates;
+  }, [rates]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -190,7 +200,7 @@ export function StockPortfolio() {
     return groups;
   }, [holdings]);
 
-  /** Get totals for each type */
+  /** Get totals for each type (converted to mainCurrency) */
   const typeTotals = useMemo(() => {
     const totals: Record<StockAssetType, { cost: number; value: number }> = {
       fund: { cost: 0, value: 0 },
@@ -203,13 +213,18 @@ export function StockPortfolio() {
         const cost = Number(h.buy_price) * Number(h.quantity);
         const currentPrice = getEffectivePrice(h.symbol);
         const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
-        totals[type as StockAssetType].cost += cost;
-        totals[type as StockAssetType].value += value;
+        
+        // Convert to mainCurrency
+        const convertedCost = convertCurrency(cost, h.currency as Currency, mainCurrency, rateMap);
+        const convertedValue = convertCurrency(value, h.currency as Currency, mainCurrency, rateMap);
+        
+        totals[type as StockAssetType].cost += convertedCost;
+        totals[type as StockAssetType].value += convertedValue;
       });
     });
 
     return totals;
-  }, [groupedHoldings, getEffectivePrice]);
+  }, [groupedHoldings, getEffectivePrice, mainCurrency, rateMap]);
 
   const totalCost = useMemo(() =>
     Object.values(typeTotals).reduce((sum, t) => sum + t.cost, 0),
@@ -352,16 +367,16 @@ export function StockPortfolio() {
             <div className="flex items-end justify-between">
               <div>
                 <div className="text-2xl font-bold tabular-nums">
-                  ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatMoney(totalValue, mainCurrency)}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  成本 ${totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  成本 {formatMoney(totalCost, mainCurrency)}
                 </div>
               </div>
               <div className={`text-right ${totalPnL >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 <div className="flex items-center gap-1 text-lg font-bold tabular-nums">
                   {totalPnL >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {totalPnL >= 0 ? "+" : ""}{totalPnL.toFixed(2)}
+                  {totalPnL >= 0 ? "+" : ""}{formatMoney(totalPnL, mainCurrency)}
                 </div>
                 <div className="text-xs tabular-nums">{totalPnLPct >= 0 ? "+" : ""}{totalPnLPct.toFixed(2)}%</div>
               </div>
@@ -401,10 +416,10 @@ export function StockPortfolio() {
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-semibold tabular-nums">
-                    {CURRENCIES[items[0]?.currency || "CNY"].symbol}{totals.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(totals.value, mainCurrency)}
                   </div>
                   <div className={`text-[10px] font-semibold tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                    {pnl >= 0 ? "+" : ""}{formatMoney(pnl, mainCurrency)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
                   </div>
                 </div>
               </div>
@@ -416,8 +431,13 @@ export function StockPortfolio() {
                   const currentPrice = getEffectivePrice(h.symbol);
                   const cost = Number(h.buy_price) * Number(h.quantity);
                   const value = currentPrice > 0 ? currentPrice * Number(h.quantity) : cost;
-                  const individualPnL = value - cost;
-                  const individualPnLPct = cost > 0 ? (individualPnL / cost) * 100 : 0;
+                  
+                  // Convert individual holding to mainCurrency for display
+                  const convertedCost = convertCurrency(cost, h.currency as Currency, mainCurrency, rateMap);
+                  const convertedValue = convertCurrency(value, h.currency as Currency, mainCurrency, rateMap);
+                  
+                  const individualPnL = convertedValue - convertedCost;
+                  const individualPnLPct = convertedCost > 0 ? (individualPnL / convertedCost) * 100 : 0;
                   const isFund = type === "fund";
                   const isManual = !quote?.price && h.manual_price != null && h.manual_price > 0;
 
@@ -448,7 +468,7 @@ export function StockPortfolio() {
                             {currentPrice > 0 ? (
                               <>
                                 <div className="font-bold tabular-nums text-sm">
-                                  {CURRENCIES[h.currency].symbol}{value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {formatMoney(convertedValue, mainCurrency)}
                                 </div>
                                 <div className="text-[10px] text-muted-foreground tabular-nums">
                                   单价 {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
@@ -458,7 +478,7 @@ export function StockPortfolio() {
                                     individualPnL >= 0 ? "text-emerald-600" : "text-red-600"
                                   }`}
                                 >
-                                  {individualPnL >= 0 ? "+" : ""}{individualPnL.toFixed(2)} ({individualPnLPct >= 0 ? "+" : ""}{individualPnLPct.toFixed(2)}%)
+                                  {individualPnL >= 0 ? "+" : ""}{formatMoney(individualPnL, mainCurrency)} ({individualPnLPct >= 0 ? "+" : ""}{individualPnLPct.toFixed(2)}%)
                                 </div>
                               </>
                             ) : (
