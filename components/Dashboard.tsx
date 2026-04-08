@@ -5,6 +5,7 @@ import { useApp } from "@/components/AppProvider";
 import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
 import { useMonthTransactions, useStockHoldings, useStockQuotes, useExchangeRates } from "@/lib/swr-hooks";
 import { convertCurrency } from "@/lib/exchange";
+import { getEffectivePriceForHolding } from "@/lib/stocks";
 import { format } from "date-fns";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -65,7 +66,8 @@ export function Dashboard() {
       const q = quotes[h.symbol];
       const cur = (h.currency || "USD") as Currency;
       const cost = Number(h.buy_price) * Number(h.quantity);
-      const val = q ? q.price * Number(h.quantity) : cost;
+      const effectivePrice = getEffectivePriceForHolding(h, q);
+      const val = effectivePrice > 0 ? effectivePrice * Number(h.quantity) : cost;
       totalCost += convertCurrency(cost, cur, mainCurrency, rateMap);
       totalVal += convertCurrency(val, cur, mainCurrency, rateMap);
     }

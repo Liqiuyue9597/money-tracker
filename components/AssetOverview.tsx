@@ -6,6 +6,7 @@ import { supabase, type Account, type Currency, type CryptoHolding, CURRENCIES, 
 import { useStockHoldings, useStockQuotes, useCryptoHoldings, useCryptoPrices, useExchangeRates } from "@/lib/swr-hooks";
 import { convertCurrency } from "@/lib/exchange";
 import { CRYPTO_SYMBOLS } from "@/lib/crypto";
+import { getEffectivePriceForHolding } from "@/lib/stocks";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +57,8 @@ export function AssetOverview() {
       const q = quotes[h.symbol];
       const cur = (h.currency || "USD") as Currency;
       const cost = Number(h.buy_price) * Number(h.quantity);
-      const val = q ? q.price * Number(h.quantity) : cost;
+      const effectivePrice = getEffectivePriceForHolding(h, q);
+      const val = effectivePrice > 0 ? effectivePrice * Number(h.quantity) : cost;
       totalCost += convertCurrency(cost, cur, mainCurrency, rateMap);
       totalVal += convertCurrency(val, cur, mainCurrency, rateMap);
     }

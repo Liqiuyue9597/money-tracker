@@ -20,3 +20,20 @@ export async function getStockQuotes(symbols: string[]): Promise<Record<string, 
   if (!res.ok) throw new Error("Failed to fetch stock quotes");
   return res.json();
 }
+
+/**
+ * Get the effective price for a stock holding
+ * Priority: API quote price > manual_price from DB > 0 (fallback for cost calculation)
+ * 
+ * @param holding - The StockHolding from database
+ * @param quote - The StockQuote from API (optional)
+ * @returns Effective price number, or 0 if no price available
+ */
+export function getEffectivePriceForHolding(
+  holding: { manual_price: number | null; buy_price: number },
+  quote?: StockQuote
+): number {
+  if (quote && quote.price > 0) return quote.price;
+  if (holding.manual_price != null && holding.manual_price > 0) return holding.manual_price;
+  return 0;
+}

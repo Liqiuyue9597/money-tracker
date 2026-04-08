@@ -1,0 +1,189 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║          PORTFOLIO DATA FLOW AND CALCULATION COMPARISON                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DATA SOURCES (Database + APIs)                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  [Supabase]                          [External APIs]                        │
+│  ├─ stock_holdings                   ├─ /api/stocks → Tencent/Eastmoney   │
+│  │  • symbol, buy_price              │  • Returns StockQuote[] (price)     │
+│  │  • quantity, currency             │                                     │
+│  │  • manual_price (optional)        ├─ /api/crypto → CoinGecko           │
+│  │                                   │  • Returns CryptoPrice[] (USD)      │
+│  ├─ crypto_holdings                  │                                     │
+│  │  • symbol, buy_price (USD)        └─ /api/exchange                      │
+│  │  • quantity                          • Returns rates for base currency   │
+│  │                                      • 1-hour cache                      │
+│  └─ accounts                                                                │
+│     • balance, currency                                                     │
+│     • exclude_from_total                                                    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SWR HOOKS (Caching & Deduplication Layer)                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  useStockHoldings(userId)      │ useStockQuotes(symbols)                   │
+│  ↓                             │ ↓                                         │
+│  Returns: StockHolding[]       │ Returns: { AAPL: {...}, ... }            │
+│                                │ Dedup: 60s, Cache: 30s                   │
+│                                │                                           │
+│  useCryptoHoldings(userId)     │ useCryptoPrices(symbols)                 │
+│  ↓                             │ ↓                                         │
+│  Returns: CryptoHolding[]      │ Returns: { BTC: {...}, ... }             │
+│                                │                                           │
+│  useExchangeRates(currency)                                                │
+│  ↓                                                                          │
+│  Returns: { base: "CNY", rates: { USD: 0.137, HKD: 1.07 } }              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CALCULATION LAYER                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────┐   ┌─────────────────────────┐                 │
+│  │ ✅ AssetOverview.tsx    │   │ ❌ StockPortfolio.tsx   │                 │
+│  ├─────────────────────────┤   ├─────────────────────────┤                 │
+│  │                         │   │                         │                 │
+│  │ Imports:                │   │ Imports:                │                 │
+│  │ • useApp() → mainCur    │   │ • NOT useApp()          │                 │
+│  │ • useExchangeRates()    │   │ • NOT useExchangeRates()│                 │
+│  │ • convertCurrency()     │   │ • NOT convertCurrency() │                 │
+│  │                         │   │                         │                 │
+│  │ For each holding h:     │   │ For each holding h:     │                 │
+│  │ ─────────────────────   │   │ ─────────────────────   │                 │
+│  │ cost = buy_price × qty  │   │ cost = buy_price × qty  │                 │
+│  │ value = quote × qty     │   │ value = quote × qty     │                 │
+│  │                         │   │                         │                 │
+│  │ ✅ CONVERT:             │   │ ❌ NO CONVERSION:       │                 │
+│  │ cost_converted =        │   │ cost_raw = cost         │                 │
+│  │   convert(cost,         │   │ value_raw = value       │                 │
+│  │    h.currency →         │   │                         │                 │
+│  │    mainCurrency)        │   │ Group by asset_type:    │                 │
+│  │                         │   │ { us: [...],            │                 │
+│  │ value_converted =       │   │   hk: [...],            │                 │
+│  │   convert(value,        │   │   fund: [...] }         │                 │
+│  │    h.currency →         │   │                         │                 │
+│  │    mainCurrency)        │   │ Sum across types:       │                 │
+│  │                         │   │ totalValue =            │                 │
+│  │ totalCost += cost_...   │   │   100 + 50 + 1.50       │                 │
+│  │ totalValue += value_... │   │   = 151.50 ❌           │                 │
+│  │                         │   │  (mixed currencies!)    │                 │
+│  │ FINAL:                  │   │                         │                 │
+│  │ totalCost: 758.50 CNY ✅   │ FINAL:                  │                 │
+│  │ totalValue: 1114.75 CNY ✅ │ totalValue: 206.50 ❌    │                 │
+│  │                         │   │ (should be 1114.75 CNY) │                 │
+│  └─────────────────────────┘   └─────────────────────────┘                 │
+│                                                                              │
+│  ┌─────────────────────────┐                                                │
+│  │ ✅ Dashboard.tsx        │                                                │
+│  ├─────────────────────────┤                                                │
+│  │                         │                                                │
+│  │ Imports:                │                                                │
+│  │ • useApp() → mainCur    │                                                │
+│  │ • useExchangeRates()    │                                                │
+│  │ • convertCurrency()     │                                                │
+│  │                         │                                                │
+│  │ Logic: IDENTICAL to     │                                                │
+│  │ AssetOverview.tsx ✅    │                                                │
+│  │                         │                                                │
+│  │ totalCost: 758.50 CNY ✅   │                                             │
+│  │ totalValue: 1114.75 CNY ✅ │                                             │
+│  │                         │                                                │
+│  └─────────────────────────┘                                                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DISPLAY LAYER (What user sees)                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ /assets (AssetOverview)                                              │   │
+│  ├──────────────────────────────────────────────────────────────────────┤   │
+│  │ 总资产（净值）                                                       │   │
+│  │ ¥1114.75                                         ✅ CORRECT         │   │
+│  │                                                                      │   │
+│  │ 股票                                                                │   │
+│  │ ¥1114.75 (includes all holdings in CNY)         ✅ CORRECT         │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ /stocks (StockPortfolio)                                             │   │
+│  ├──────────────────────────────────────────────────────────────────────┤   │
+│  │ 投资组合总览                                                         │   │
+│  │ $206.50                                          ❌ WRONG!          │   │
+│  │ (should be ¥1114.75)                                                │   │
+│  │                                                                      │   │
+│  │ US: $150.00                                                         │   │
+│  │ HK: HK$55.00                                                        │   │
+│  │ Fund: ¥1.50                                                         │   │
+│  │ (Group totals are correct, combined total is wrong) ❌              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ / (Dashboard)                                                        │   │
+│  ├──────────────────────────────────────────────────────────────────────┤   │
+│  │ 投资组合                                                             │   │
+│  │ ¥1114.75                                         ✅ CORRECT         │   │
+│  │ (Same as AssetOverview)                                             │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ CURRENCY CONVERSION EXAMPLE                                                  ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║ Exchange Rates: 1 USD = 7 CNY, 1 HKD = 1.15 CNY                             ║
+║                                                                              ║
+║ ┌─ AAPL (USD) ─┐     ┌─ 000979 (CNY) ─┐     ┌─ 0700 (HKD) ─┐              ║
+║ │ cost: $100   │     │ cost: ¥1        │     │ cost: HK$50 │              ║
+║ │ value: $150  │     │ value: ¥1.50    │     │ value: HK$55│              ║
+║ └──────────────┘     └────────────────┘     └────────────┘              ║
+║         │                    │                      │                       ║
+║         │ convert(100, USD → CNY) = 700            │ convert(50, HKD → CNY) = 57.5  ║
+║         │ convert(150, USD → CNY) = 1050           │ convert(55, HKD → CNY) = 63.25 ║
+║         └─────────────────────┬─────────────────────┴────────────────┐      ║
+║                               │                                      │      ║
+║                        ✅ AssetOverview / Dashboard:                 ║      ║
+║                        Cost:  700 + 1 + 57.5 = 758.50 CNY            ║      ║
+║                        Value: 1050 + 1.5 + 63.25 = 1114.75 CNY       ║      ║
+║                                                                      ║      ║
+║                        ❌ StockPortfolio:                             ║      ║
+║                        Cost:  100 + 1 + 50 = 151 (mixed!)            ║      ║
+║                        Value: 150 + 1.50 + 55 = 206.50 (mixed!)      ║      ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ DEPENDENCY TREE                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  AppProvider                                                                 ║
+║  ├─ user, loading                                                           ║
+║  ├─ mainCurrency ✅ (AssetOverview, Dashboard use this)                     ║
+║  ├─ accounts, categories                                                    ║
+║  └─ ❌ StockPortfolio DOESN'T use AppProvider!                              ║
+║                                                                              ║
+║  useApp() [from AppProvider]                                                ║
+║  ├─ Used in: ✅ AssetOverview, Dashboard                                    ║
+║  ├─ NOT used in: ❌ StockPortfolio                                          ║
+║  └─ Provides: mainCurrency, accounts                                        ║
+║                                                                              ║
+║  useExchangeRates(mainCurrency)                                             ║
+║  ├─ Used in: ✅ AssetOverview, Dashboard                                    ║
+║  ├─ NOT used in: ❌ StockPortfolio                                          ║
+║  └─ Returns: { base: "CNY", rates: { USD: 0.137, HKD: 1.07 } }            ║
+║                                                                              ║
+║  convertCurrency(amount, from, to, rates)                                   ║
+║  ├─ Used in: ✅ AssetOverview, Dashboard                                    ║
+║  ├─ NOT used in: ❌ StockPortfolio                                          ║
+║  └─ Converts between any two currencies                                     ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+

@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type StockHolding, type Currency, type StockAssetType, CURRENCIES, formatMoney } from "@/lib/supabase";
 import { useStockHoldings, useStockQuotes, useExchangeRates } from "@/lib/swr-hooks";
-import { getStockQuotes, type StockQuote } from "@/lib/stocks";
+import { getStockQuotes, type StockQuote, getEffectivePriceForHolding } from "@/lib/stocks";
 import { convertCurrency } from "@/lib/exchange";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -167,11 +167,9 @@ export function StockPortfolio() {
   /** Get effective price for a symbol: API quote > manual price (from DB) > 0 */
   const getEffectivePrice = useCallback((sym: string): number => {
     const quote = quotes[sym];
-    if (quote && quote.price > 0) return quote.price;
-    // Fall back to manual_price from DB
     const holding = holdings.find((h) => h.symbol === sym);
-    if (holding?.manual_price != null && holding.manual_price > 0) return holding.manual_price;
-    return 0;
+    if (!holding) return 0;
+    return getEffectivePriceForHolding(holding, quote);
   }, [quotes, holdings]);
 
   /** Group holdings by asset_type and sort by created_at */
