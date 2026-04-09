@@ -39,6 +39,7 @@ export function Dashboard() {
     let exp = 0, inc = 0;
     const catMap: Record<string, { name: string; icon: string; amount: number }> = {};
     for (const t of transactions) {
+      if (t.type === "transfer") continue; // Skip transfers from stats
       const amt = Number(t.amount);
       if (t.type === "expense") {
         exp += amt;
@@ -299,30 +300,38 @@ export function Dashboard() {
               {recentTransactions.map((t) => (
                 <div key={t.id} className="flex items-start justify-between">
                   <div className="flex items-start gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-lg">
-                      {t.categories?.icon || "\ud83d\udccc"}
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-lg ${
+                      t.type === "transfer" ? "bg-blue-100" : "bg-muted"
+                    }`}>
+                      {t.type === "transfer" ? "🔄" : (t.categories?.icon || "\ud83d\udccc")}
                     </div>
                     <div>
                       <p className="text-sm font-medium">
-                        {t.categories?.name || "未分类"}
+                        {t.type === "transfer" ? "转账" : (t.categories?.name || "未分类")}
                       </p>
-                      {t.note && (
+                      {t.type === "transfer" && t.accounts && t.to_accounts ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t.accounts.name} → {t.to_accounts.name}
+                        </p>
+                      ) : t.note ? (
                         <p className="text-xs text-muted-foreground">{t.note}</p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   <div className="text-right">
                     <p
                       className={`text-sm font-medium tabular-nums ${
-                        t.type === "income"
-                          ? "text-emerald-600"
-                          : "text-foreground"
+                        t.type === "transfer"
+                          ? "text-blue-600"
+                          : t.type === "income"
+                            ? "text-emerald-600"
+                            : "text-foreground"
                       }`}
                     >
-                      {t.type === "expense" ? "-" : "+"}
+                      {t.type === "transfer" ? "" : t.type === "expense" ? "-" : "+"}
                       {formatMoney(Number(t.amount), t.currency)}
                     </p>
-                    {t.accounts && (
+                    {t.type !== "transfer" && t.accounts && (
                       <p className="text-xs text-muted-foreground">
                         {t.accounts.name}
                       </p>

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 export function TransactionList() {
-  const { user, mainCurrency } = useApp();
+  const { user, mainCurrency, refreshAccounts } = useApp();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [search, setSearch] = useState("");
 
@@ -27,7 +27,8 @@ export function TransactionList() {
         (t) =>
           !search ||
           t.note?.toLowerCase().includes(search.toLowerCase()) ||
-          t.categories?.name?.toLowerCase().includes(search.toLowerCase())
+          t.categories?.name?.toLowerCase().includes(search.toLowerCase()) ||
+          (t.type === "transfer" && "转账".includes(search.toLowerCase()))
       ),
     [transactions, search]
   );
@@ -42,6 +43,7 @@ export function TransactionList() {
     [filtered]
   );
 
+  // Exclude transfers from expense/income totals
   const totalExpense = useMemo(
     () => filtered.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0),
     [filtered]
@@ -60,6 +62,7 @@ export function TransactionList() {
         (prev) => prev?.filter((t) => t.id !== id),
         { revalidate: false }
       );
+      refreshAccounts();
       toast.success("已删除");
     } catch (err) {
       console.error("Failed to delete transaction:", err);
@@ -171,57 +174,73 @@ export function TransactionList() {
                       </div>
                     </div>
 
-                    {items.map((t, idx) => (
-                      <div key={t.id}>
-                        {idx > 0 && <Separator />}
-                        <div
-                          className="flex items-center justify-between py-3 cursor-pointer active:opacity-50 transition-opacity"
-                          onClick={() => {
-                            if (confirm("删除这条记录？")) handleDelete(t.id);
-                          }}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-lg">
-                              {t.categories?.icon || "\ud83d\udccc"}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">
-                                {t.categories?.name || "未分类"}
-                              </p>
-                              {t.note && (
-                                <p className="text-xs text-muted-foreground">
-                                  {t.note}
+                    {items.map((t, idx) => {
+                      const isTransfer = t.type === "transfer";
+                      return (
+                        <div key={t.id}>
+                          {idx > 0 && <Separator />}
+                          <div
+                            className="flex items-center justify-between py-3 cursor-pointer active:opacity-50 transition-opacity"
+                            onClick={() => {
+                              if (confirm("删除这条记录？")) handleDelete(t.id);
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`flex h-10 w-10 items-center justify-center rounded-xl text-lg ${
+                                isTransfer ? "bg-blue-100" : "bg-muted"
+                              }`}>
+                                {isTransfer ? "🔄" : (t.categories?.icon || "\ud83d\udccc")}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {isTransfer ? "转账" : (t.categories?.name || "未分类")}
                                 </p>
-                              )}
+                                {isTransfer && t.accounts && t.to_accounts ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {t.accounts.name} → {t.to_accounts.name}
+                                  </p>
+                                ) : t.note ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {t.note}
+                                  </p>
+                                ) : null}
+                                {isTransfer && t.note && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {t.note}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p
-                              className={`text-sm font-semibold tabular-nums ${
-                                t.type === "income"
-                                  ? "text-emerald-600"
-                                  : "text-foreground"
-                              }`}
-                            >
-                              {t.type === "expense" ? "-" : "+"}
-                              {formatMoney(Number(t.amount), t.currency)}
-                            </p>
-                            <div className="flex items-center gap-1.5 justify-end mt-0.5">
-                              {t.currency !== mainCurrency && (
-                                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                                  {t.currency}
-                                </Badge>
-                              )}
-                              {t.accounts && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  {t.accounts.name}
-                                </span>
-                              )}
+                            <div className="text-right">
+                              <p
+                                className={`text-sm font-semibold tabular-nums ${
+                                  isTransfer
+                                    ? "text-blue-600"
+                                    : t.type === "income"
+                                      ? "text-emerald-600"
+                                      : "text-foreground"
+                                }`}
+                              >
+                                {isTransfer ? "" : t.type === "expense" ? "-" : "+"}
+                                {formatMoney(Number(t.amount), t.currency)}
+                              </p>
+                              <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                                {t.currency !== mainCurrency && (
+                                  <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                                    {t.currency}
+                                  </Badge>
+                                )}
+                                {!isTransfer && t.accounts && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {t.accounts.name}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </CardContent>
                 </Card>
               );

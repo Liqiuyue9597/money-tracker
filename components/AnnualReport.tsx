@@ -79,6 +79,7 @@ export function AnnualReport() {
     const accMap: Record<string, AccountData> = {};
 
     for (const t of transactions) {
+      if (t.type === "transfer") continue; // Skip transfers from annual stats
       const amt = Number(t.amount);
       const monthKey = t.date.substring(0, 7);
 
@@ -129,7 +130,7 @@ export function AnnualReport() {
       topExpenseCategories: Object.values(expCatMap).sort((a, b) => b.amount - a.amount).slice(0, 8),
       topIncomeCategories: Object.values(incCatMap).sort((a, b) => b.amount - a.amount).slice(0, 5),
       topAccounts: Object.values(accMap).sort((a, b) => b.amount - a.amount).slice(0, 5),
-      transactionCount: transactions.length,
+      transactionCount: transactions.filter((t) => t.type !== "transfer").length,
       maxExpenseMonth: [...monthsWithExp].sort((a, b) => b.expense - a.expense)[0] || null,
       maxIncomeMonth: [...monthsWithInc].sort((a, b) => b.income - a.income)[0] || null,
       avgMonthlyExpense: monthsWithExp.length > 0 ? exp / monthsWithExp.length : 0,

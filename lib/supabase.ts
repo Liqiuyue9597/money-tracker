@@ -16,7 +16,7 @@ export function isSupabaseConfigured(): boolean {
 // ============ Types ============
 
 export type Currency = "CNY" | "USD" | "HKD";
-export type TransactionType = "expense" | "income";
+export type TransactionType = "expense" | "income" | "transfer";
 export type StockTransactionType = "buy" | "sell";
 export type AccountType = "cash" | "stock" | "crypto";
 export type StockAssetType = "fund" | "hk" | "us";
@@ -59,6 +59,7 @@ export interface Transaction {
   category_name?: string;
   category_icon?: string;
   account_id: string | null;
+  to_account_id: string | null;
   note: string;
   date: string;
   created_at: string;
