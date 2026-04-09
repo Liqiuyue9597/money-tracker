@@ -31,13 +31,39 @@ export function useMonthTransactions(userId: string | undefined, month: Date) {
     async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, categories(name, icon), accounts(name, icon), to_accounts:accounts!transactions_to_account_id_fkey(name, icon)")
+        .select("*, categories(name, icon), accounts(name, icon)")
         .eq("user_id", userId!)
         .gte("date", mStart)
         .lte("date", mEnd)
         .order("date", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
+      
+      // Fetch to_accounts separately for transfer transactions
+      if (data && data.length > 0) {
+        const toAccountIds = data
+          .filter(t => t.to_account_id)
+          .map(t => t.to_account_id!);
+        
+        if (toAccountIds.length > 0) {
+          const { data: toAccounts, error: toError } = await supabase
+            .from("accounts")
+            .select("id, name, icon")
+            .in("id", toAccountIds);
+          
+          if (toError) throw toError;
+          
+          const toAccountsMap = new Map(
+            (toAccounts || []).map(a => [a.id, { name: a.name, icon: a.icon }])
+          );
+          
+          return data.map(t => ({
+            ...t,
+            to_accounts: t.to_account_id ? toAccountsMap.get(t.to_account_id) || null : null,
+          }));
+        }
+      }
+      
       return data ?? [];
     },
     defaultConfig,
@@ -51,12 +77,38 @@ export function useYearTransactions(userId: string | undefined, year: number) {
     async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, categories(name, icon), accounts(name, icon), to_accounts:accounts!transactions_to_account_id_fkey(name, icon)")
+        .select("*, categories(name, icon), accounts(name, icon)")
         .eq("user_id", userId!)
         .gte("date", `${year}-01-01`)
         .lte("date", `${year}-12-31`)
         .order("date", { ascending: true });
       if (error) throw error;
+      
+      // Fetch to_accounts separately for transfer transactions
+      if (data && data.length > 0) {
+        const toAccountIds = data
+          .filter(t => t.to_account_id)
+          .map(t => t.to_account_id!);
+        
+        if (toAccountIds.length > 0) {
+          const { data: toAccounts, error: toError } = await supabase
+            .from("accounts")
+            .select("id, name, icon")
+            .in("id", toAccountIds);
+          
+          if (toError) throw toError;
+          
+          const toAccountsMap = new Map(
+            (toAccounts || []).map(a => [a.id, { name: a.name, icon: a.icon }])
+          );
+          
+          return data.map(t => ({
+            ...t,
+            to_accounts: t.to_account_id ? toAccountsMap.get(t.to_account_id) || null : null,
+          }));
+        }
+      }
+      
       return data ?? [];
     },
     defaultConfig,
