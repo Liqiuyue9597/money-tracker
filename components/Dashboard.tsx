@@ -2,10 +2,8 @@
 
 import { useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
-import { useMonthTransactions, useStockHoldings, useStockQuotes, useExchangeRates } from "@/lib/swr-hooks";
-import { convertCurrency } from "@/lib/exchange";
-import { getEffectivePriceForHolding } from "@/lib/stocks";
+import { formatMoney } from "@/lib/supabase";
+import { useMonthTransactions } from "@/lib/swr-hooks";
 import { format } from "date-fns";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +14,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw,
-  DollarSign,
   BarChart3,
 } from "lucide-react";
 
@@ -26,12 +23,6 @@ export function Dashboard() {
 
   // SWR hooks — cached & deduplicated across components
   const { data: transactions, isLoading: txLoading } = useMonthTransactions(user?.id, now);
-  const { data: holdings } = useStockHoldings(user?.id);
-  const stockSymbols = useMemo(() => holdings ? [...new Set(holdings.map((h) => h.symbol))] : [], [holdings]);
-  const { data: quotes } = useStockQuotes(stockSymbols);
-  const { data: usdRates } = useExchangeRates("USD");
-  const { data: rates } = useExchangeRates(mainCurrency);
-  const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
 
   // Derive monthly stats
   const { monthExpense, monthIncome, topCategories, recentTransactions } = useMemo(() => {
@@ -58,22 +49,6 @@ export function Dashboard() {
       recentTransactions: transactions.slice(0, 5),
     };
   }, [transactions]);
-
-  // Derive stock totals (converted to mainCurrency per holding)
-  const { stockValue, stockCost, stockPnL } = useMemo(() => {
-    if (!holdings || holdings.length === 0 || !quotes) return { stockValue: 0, stockCost: 0, stockPnL: 0 };
-    let totalVal = 0, totalCost = 0;
-    for (const h of holdings) {
-      const q = quotes[h.symbol];
-      const cur = (h.currency || "USD") as Currency;
-      const cost = Number(h.buy_price) * Number(h.quantity);
-      const effectivePrice = getEffectivePriceForHolding(h, q);
-      const val = effectivePrice > 0 ? effectivePrice * Number(h.quantity) : cost;
-      totalCost += convertCurrency(cost, cur, mainCurrency, rateMap);
-      totalVal += convertCurrency(val, cur, mainCurrency, rateMap);
-    }
-    return { stockValue: totalVal, stockCost: totalCost, stockPnL: totalVal - totalCost };
-  }, [holdings, quotes, mainCurrency, rateMap]);
 
   const net = monthIncome - monthExpense;
 
@@ -192,105 +167,6 @@ export function Dashboard() {
         </Card>
       )}
 
-      {/* Stock Portfolio */}
-      {stockValue > 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">投资组合</span>
-            </div>
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-xl font-bold tabular-nums">
-                  {formatMoney(stockValue, mainCurrency)}
-                </p>
-                <p className="text-[10px] text-muted-foreground tabular-nums">
-                  成本 {formatMoney(stockCost, mainCurrency)}
-                </p>
-              </div>
-              <div className="text-right">
-                <span
-                  className={`text-sm font-medium tabular-nums ${
-                    stockPnL >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {stockPnL >= 0 ? "+" : ""}{formatMoney(stockPnL, mainCurrency)}
-                </span>
-                {stockCost > 0 && (
-                  <p className={`text-[10px] font-medium tabular-nums ${stockPnL >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {stockPnL >= 0 ? "+" : ""}{((stockPnL / stockCost) * 100).toFixed(1)}%
-                  </p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Exchange Rates — based on 1 USD */}
-      {usdRates && (
-        <Card className="mb-4">
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-2 mb-3">
-              <DollarSign className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">实时汇率（1 USD）</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {(["CNY", "USD", "HKD"] as Currency[]).map((c) => (
-                <div
-                  key={c}
-                  className="rounded-lg bg-muted/50 p-2 text-center"
-                >
-                  <p className="text-xs text-muted-foreground">
-                    {CURRENCIES[c].name}
-                  </p>
-                  <p className="text-sm font-semibold tabular-nums">
-                    {c === "USD"
-                      ? "1.0000"
-                      : (usdRates.rates[c] || 0).toFixed(4)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Top Spending Categories */}
-      {topCategories.length > 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-0">
-            <p className="font-medium text-sm mb-3">支出构成</p>
-            <div className="space-y-3">
-              {topCategories.map((cat) => {
-                const pct =
-                  monthExpense > 0 ? (cat.amount / monthExpense) * 100 : 0;
-                return (
-                  <div key={cat.name}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="flex items-center gap-2">
-                        <span>{cat.icon}</span>
-                        <span>{cat.name}</span>
-                      </span>
-                      <span className="text-muted-foreground tabular-nums">
-                        {formatMoney(cat.amount, mainCurrency)}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted">
-                      <div
-                        className="h-2 rounded-full bg-primary transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Recent Transactions */}
       {recentTransactions.length > 0 && (
         <Card className="mb-4">
@@ -339,6 +215,40 @@ export function Dashboard() {
                   </div>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top Spending Categories */}
+      {topCategories.length > 0 && (
+        <Card className="mb-4">
+          <CardContent className="pt-0">
+            <p className="font-medium text-sm mb-3">支出构成</p>
+            <div className="space-y-3">
+              {topCategories.map((cat) => {
+                const pct =
+                  monthExpense > 0 ? (cat.amount / monthExpense) * 100 : 0;
+                return (
+                  <div key={cat.name}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="flex items-center gap-2">
+                        <span>{cat.icon}</span>
+                        <span>{cat.name}</span>
+                      </span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {formatMoney(cat.amount, mainCurrency)}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted">
+                      <div
+                        className="h-2 rounded-full bg-primary transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
