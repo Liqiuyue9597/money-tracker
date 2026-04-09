@@ -31,7 +31,7 @@ export function useMonthTransactions(userId: string | undefined, month: Date) {
     async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, categories(name, icon), accounts(name, icon)")
+        .select("*, categories(name, icon), accounts:accounts!transactions_account_id_fkey(name, icon)")
         .eq("user_id", userId!)
         .gte("date", mStart)
         .lte("date", mEnd)
@@ -77,7 +77,7 @@ export function useYearTransactions(userId: string | undefined, year: number) {
     async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, categories(name, icon), accounts(name, icon)")
+        .select("*, categories(name, icon), accounts:accounts!transactions_account_id_fkey(name, icon)")
         .eq("user_id", userId!)
         .gte("date", `${year}-01-01`)
         .lte("date", `${year}-12-31`)
