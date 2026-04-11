@@ -89,7 +89,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
     setSaving(true);
     const type: AccountType = "cash";
     if (editAccount) {
-      const { error } = await supabase.from("accounts").update({ name: name.trim(), type: editAccount.type, currency, icon, balance: parseFloat(initialBalance) ?? 0, exclude_from_total: excludeFromTotal }).eq("id", editAccount.id);
+      const { error } = await supabase.from("accounts").update({ name: name.trim(), type: editAccount.type, currency, icon, balance: parseFloat(initialBalance) || 0, exclude_from_total: excludeFromTotal }).eq("id", editAccount.id);
       if (error) toast.error("更新失败"); else { toast.success("已更新"); refreshAccounts(); onOpenChange(false); }
     } else {
       const { error } = await supabase.from("accounts").insert({ user_id: user.id, name: name.trim(), type, currency, icon, balance: parseFloat(initialBalance) || 0, sort_order: 99, exclude_from_total: excludeFromTotal });
