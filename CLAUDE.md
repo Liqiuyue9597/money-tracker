@@ -34,22 +34,23 @@ app/
     └── exchange/route.ts   # 汇率代理 (open.er-api.com)
 
 components/
-├── AppProvider.tsx         # 全局 Context (user, categories, accounts, mainCurrency)
+├── AppProvider.tsx         # 全局 Context (user, categories, accounts, mainCurrency, monthlyBudget)
 ├── AuthForm.tsx            # 登录/注册 (支持 Google OAuth + 邮箱密码)
-├── BottomNav.tsx           # 底部导航栏 (概览/账单/记账+/资产/设置)
-├── Dashboard.tsx           # 首页概览 (收支/账户/股票/汇率/支出排行/最近记录)
-├── QuickEntry.tsx          # 快捷记账 (数字键盘/分类/账户选择/币种)
+├── BottomNav.tsx           # 底部导航栏 (概览/账单/记账+/资产/设置，记账页不显示)
+├── Dashboard.tsx           # 首页概览 (收支环比/月预算进度/支出构成环比)
+├── QuickEntry.tsx          # 快捷记账 (沉浸式全屏/数字键盘/分类/账户选择/币种/顶部关闭按钮)
 ├── TransactionList.tsx     # 账单列表 (按月/按日分组/搜索/删除)
 ├── AssetOverview.tsx       # 资产总览 (净值/现金账户/股票/加密货币/汇率)
 ├── StockPortfolio.tsx      # 股票持仓管理
 ├── AccountManager.tsx      # 添加/编辑现金账户对话框 (银行预设+自定义)
 ├── CategoryManager.tsx     # 添加/编辑/删除分类对话框 (emoji图标选择)
 ├── AnnualReport.tsx        # 年度报告 (趋势图/分类构成/储蓄率)
-├── SettingsPage.tsx        # 设置 (币种/分类管理/导出/快捷指令说明)
+├── SettingsPage.tsx        # 设置 (币种/月预算/分类管理/导出/快捷指令说明)
 └── ui/                     # shadcn/ui 组件 (card, input, dialog, badge, etc.)
 
 lib/
 ├── supabase.ts             # Supabase 客户端 + 类型定义 + BANK_PRESETS + formatMoney
+├── swr-hooks.ts            # SWR hooks (useMonthTransactions, useStockHoldings, useUserSettings 等)
 ├── stocks.ts               # getStockQuotes() 封装
 ├── crypto.ts               # getCryptoPrices() + CRYPTO_SYMBOLS 配置
 ├── exchange.ts             # getExchangeRates() + convertCurrency()
@@ -84,6 +85,7 @@ lib/
 | `categories` | 记账分类 (餐饮/交通/购物等，18个默认，支持自定义增删改) | ✅ user_id |
 | `transactions` | 收支记录 (关联 category_id + account_id) | ✅ user_id |
 | `accounts` | 现金账户 (type=cash) | ✅ user_id |
+| `user_settings` | 用户偏好 (key-value: monthly_budget, main_currency) | ✅ user_id |
 | `stock_holdings` | 股票持仓 (symbol, quantity, buy_price, currency) | ✅ user_id |
 | `stock_transactions` | 股票交易记录 (表存在但UI未用) | ✅ user_id |
 | `crypto_holdings` | 加密货币持仓 (BTC/ETH 等) | ✅ user_id |
@@ -112,10 +114,10 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 
 ### 类型定义 (lib/supabase.ts)
 - `Currency`: "CNY" | "USD" | "HKD"
-- `TransactionType`: "expense" | "income"
+- `TransactionType`: "expense" | "income" | "transfer"
 - `AccountType`: "cash" | "stock" | "crypto"
 - `BankPreset`: { name, icon, types } — 银行/机构预设列表
-- 主要接口: Transaction, Category, Account, StockHolding, CryptoHolding
+- 主要接口: Transaction, Category, Account, StockHolding, CryptoHolding, UserSetting
 
 ## 分类管理
 - **自定义分类**: 用户可在设置页面添加/编辑/删除分类（支出和收入分开管理）
@@ -129,12 +131,14 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 - `user` — Supabase Auth 用户
 - `categories` — 用户分类列表（按使用频率降序排列）
 - `accounts` — 用户账户列表 (过滤 is_archived)
-- `mainCurrency` — 主币种 (默认 CNY)
+- `mainCurrency` — 主币种 (默认 CNY，持久化到 user_settings 表)
+- `monthlyBudget` — 月预算金额 (number | null，持久化到 user_settings 表)
+- `setMonthlyBudget` — 更新月预算（async，自动 toast 反馈）
 - `signIn/signUp/signOut` — 认证方法
 - `refreshCategories/refreshAccounts` — 刷新数据（含 try/catch 错误处理）
 
 ## 汇率显示
-- 所有页面（Dashboard + AssetOverview）统一以 **1 USD 为基准**显示汇率
+- AssetOverview 以 **1 USD 为基准**显示汇率
 - 内部货币换算仍使用 mainCurrency 为基准的汇率（rates state）
 - 显示用的 USD 汇率单独请求（usdRates state）
 - 汇率 API: open.er-api.com，1 小时客户端缓存（按币种独立 Map 缓存）+ 1 小时服务端缓存
