@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Sankey, Tooltip, Layer, Rectangle } from "recharts";
 import type { NodeProps as SankeyNodeProps, LinkProps as SankeyLinkProps } from "recharts/types/chart/Sankey";
 import { Card, CardContent } from "@/components/ui/card";
@@ -138,6 +138,20 @@ export function AssetSankey({
   excludedTotal,
   mainCurrency,
 }: AssetSankeyProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(360);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setChartWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const { nodes, links, netWorth, debtRatio } = useMemo(() => {
     const nodeList: { name: string; isExcluded?: boolean }[] = [];
     const linkList: { source: number; target: number; value: number }[] = [];
@@ -216,8 +230,9 @@ export function AssetSankey({
     <Card className="mb-4 border-0 shadow-sm">
       <CardContent className="p-4">
         <div className="text-sm font-medium mb-3">资产组成</div>
+        <div ref={containerRef}>
         <Sankey
-          width={360}
+          width={chartWidth}
           height={Math.max(200, nodes.length * 45)}
           data={{ nodes, links }}
           node={CustomNode}
@@ -246,6 +261,7 @@ export function AssetSankey({
             }}
           />
         </Sankey>
+        </div>
         <div className="text-center text-[11px] text-muted-foreground mt-1 tabular-nums">
           净资产{" "}
           <span className="font-semibold text-foreground">
