@@ -3,7 +3,6 @@
 import { useApp } from "@/components/AppProvider";
 import { AuthForm } from "@/components/AuthForm";
 import { QuickEntry } from "@/components/QuickEntry";
-import { BottomNav } from "@/components/BottomNav";
 
 export default function QuickPage() {
   const { user, loading } = useApp();
@@ -16,7 +15,6 @@ export default function QuickPage() {
       <div className="flex-1 overflow-auto">
         <QuickEntry />
       </div>
-      <BottomNav />
     </main>
   );
 }

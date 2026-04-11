@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowDownUp, Delete, Check, ArrowRight } from "lucide-react";
+import { ArrowDownUp, Delete, Check, ArrowRight, X } from "lucide-react";
 
 export function QuickEntry() {
   const { user, categories, accounts, refreshAccounts } = useApp();
@@ -150,8 +150,15 @@ export function QuickEntry() {
 
   return (
     <div className="flex flex-col max-w-lg mx-auto">
-      {/* Type toggle */}
+      {/* Type toggle + close button */}
       <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+        <button
+          onClick={() => router.back()}
+          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted transition-colors"
+          aria-label="关闭"
+        >
+          <X className="h-5 w-5 text-muted-foreground" />
+        </button>
         <div className="flex rounded-xl bg-muted p-1 gap-1">
           <button
             onClick={() => {
@@ -349,7 +356,7 @@ export function QuickEntry() {
       </div>
 
       {/* Keypad */}
-      <div className="px-4 pt-3 pb-[calc(5rem+env(safe-area-inset-bottom))] border-t">
+      <div className="px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] border-t">
         <div className="grid grid-cols-3 gap-1.5">
           {keypadKeys.map((key) => (
             <button

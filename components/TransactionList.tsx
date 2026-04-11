@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
 import { useApp } from "@/components/AppProvider";
 import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
 import { useMonthTransactions, type TransactionWithJoins } from "@/lib/swr-hooks";
@@ -20,6 +20,9 @@ export function TransactionList() {
   const [search, setSearch] = useState("");
 
   const { data: transactions, isLoading: loading, mutate } = useMonthTransactions(user?.id, currentMonth);
+
+  // Detect when SWR is fetching new month data (key changed but data is stale from previous month)
+  const isMonthSwitching = loading && !!transactions;
 
   const filtered = useMemo(
     () =>
@@ -100,6 +103,7 @@ export function TransactionList() {
       </div>
 
       {/* Summary cards */}
+      <div className={`transition-opacity duration-200 ${isMonthSwitching ? "opacity-40" : "opacity-100"}`}>
       <div className="grid grid-cols-2 gap-3 mb-4">
         <Card className="bg-red-50 border-0 ring-0">
           <CardContent className="pt-0 pb-3">
@@ -247,6 +251,7 @@ export function TransactionList() {
             })}
         </div>
       )}
+      </div>
     </div>
   );
 }

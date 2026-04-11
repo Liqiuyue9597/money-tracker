@@ -30,9 +30,9 @@ export function AssetOverview() {
   // SWR hooks
   const { data: rates } = useExchangeRates(mainCurrency);
   const { data: usdRates } = useExchangeRates("USD");
-  const { data: holdings } = useStockHoldings(user?.id);
+  const { data: holdings, isLoading: holdingsLoading } = useStockHoldings(user?.id);
   const stockSymbols = useMemo(() => holdings ? [...new Set(holdings.map((h) => h.symbol))] : [], [holdings]);
-  const { data: quotes } = useStockQuotes(stockSymbols);
+  const { data: quotes, isLoading: quotesLoading } = useStockQuotes(stockSymbols);
   const { data: cryptoHoldings, mutate: mutateCrypto, isLoading: cryptoLoading } = useCryptoHoldings(user?.id);
   const cryptoSymbols = useMemo(() => cryptoHoldings ? [...new Set(cryptoHoldings.map((c) => c.symbol))] : [], [cryptoHoldings]);
   const { data: cryptoPrices } = useCryptoPrices(cryptoSymbols);
@@ -235,7 +235,7 @@ export function AssetOverview() {
           </a>
         </div>
 
-        {stockValue > 0 ? (
+        {holdings && holdings.length > 0 ? (
           <Card className="border-0 shadow-sm overflow-hidden">
             <CardContent className="p-0">
               <a href="/stocks" className="block px-4 py-3.5 hover:bg-muted/50 transition-colors">
@@ -243,18 +243,34 @@ export function AssetOverview() {
                   <span className="text-2xl">📈</span>
                   <div className="flex-1 text-left">
                     <div className="text-sm font-medium">股票组合</div>
-                    <div className="text-[10px] text-muted-foreground tabular-nums">
-                      成本 {formatMoney(stockCost, mainCurrency)}
-                    </div>
+                    {quotesLoading && !quotes ? (
+                      <div className="text-[10px] text-muted-foreground">行情加载中...</div>
+                    ) : (
+                      <div className="text-[10px] text-muted-foreground tabular-nums">
+                        成本 {formatMoney(stockCost, mainCurrency)}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, mainCurrency)}</div>
-                    <div className={`text-[10px] font-medium tabular-nums ${stockPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {stockPnl >= 0 ? "+" : ""}{formatMoney(stockPnl, mainCurrency)} ({stockPnl >= 0 ? "+" : ""}{stockPnlPct.toFixed(1)}%)
-                    </div>
+                    {quotesLoading && !quotes ? (
+                      <div className="text-xs text-muted-foreground">--</div>
+                    ) : (
+                      <>
+                        <div className="font-semibold tabular-nums text-sm">{formatMoney(stockValue, mainCurrency)}</div>
+                        <div className={`text-[10px] font-medium tabular-nums ${stockPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {stockPnl >= 0 ? "+" : ""}{formatMoney(stockPnl, mainCurrency)} ({stockPnl >= 0 ? "+" : ""}{stockPnlPct.toFixed(1)}%)
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </a>
+            </CardContent>
+          </Card>
+        ) : holdingsLoading ? (
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-4 text-center">
+              <p className="text-sm text-muted-foreground">加载中...</p>
             </CardContent>
           </Card>
         ) : (

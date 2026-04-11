@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type Currency, type TransactionType, type Category, CURRENCIES } from "@/lib/supabase";
 import { CategoryManager } from "@/components/CategoryManager";
@@ -9,10 +9,15 @@ import { format } from "date-fns";
 import { Trash2 } from "lucide-react";
 
 export function SettingsPage() {
-  const { user, mainCurrency, setMainCurrency, categories, refreshCategories, signOut } = useApp();
+  const { user, mainCurrency, setMainCurrency, monthlyBudget, setMonthlyBudget, categories, refreshCategories, signOut } = useApp();
   const [catTab, setCatTab] = useState<TransactionType>("expense");
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [budgetInput, setBudgetInput] = useState(monthlyBudget != null ? String(monthlyBudget) : "");
+
+  useEffect(() => {
+    if (monthlyBudget != null) setBudgetInput(String(monthlyBudget));
+  }, [monthlyBudget]);
 
   async function handleDeleteCategory(cat: Category) {
     if (cat.usage_count > 0) {
@@ -118,6 +123,34 @@ export function SettingsPage() {
             </button>
           ))}
         </div>
+        <div className="mt-4" style={{ height: "0.5px", background: "#E8E6E3" }} />
+      </div>
+
+      {/* Monthly Budget */}
+      <div className="mb-8">
+        <div className="section-label mb-4">每月预算</div>
+        <div className="flex items-center gap-3">
+          <span className="text-[15px] text-[#A8A29E]">{CURRENCIES[mainCurrency].symbol}</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={budgetInput}
+            onChange={(e) => setBudgetInput(e.target.value)}
+            onBlur={async () => {
+              const v = Number(budgetInput);
+              if (!budgetInput || !Number.isFinite(v) || v <= 0) return;
+              try {
+                await setMonthlyBudget(v);
+              } catch {
+                // already toasted in AppProvider
+              }
+            }}
+            placeholder="输入每月预算金额"
+            className="flex-1 text-[15px] bg-transparent outline-none placeholder:text-[#D4D0CC] tabular-nums"
+            style={{ borderBottom: "1px solid #E8E6E3" }}
+          />
+        </div>
+        <p className="text-[11px] text-[#C4BDB4] mt-2">设置后将在首页显示预算进度</p>
         <div className="mt-4" style={{ height: "0.5px", background: "#E8E6E3" }} />
       </div>
 

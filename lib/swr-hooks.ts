@@ -1,5 +1,5 @@
 import useSWR, { type SWRConfiguration } from "swr";
-import { supabase, type Transaction, type StockHolding, type CryptoHolding } from "@/lib/supabase";
+import { supabase, type Transaction, type StockHolding, type CryptoHolding, type UserSetting } from "@/lib/supabase";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
 import { getCryptoPrices, type CryptoPrice } from "@/lib/crypto";
 import { getExchangeRates, type ExchangeRates } from "@/lib/exchange";
@@ -180,4 +180,37 @@ export function useExchangeRates(base: string) {
     async () => getExchangeRates(base),
     { ...defaultConfig, dedupingInterval: 300_000 }, // 5 min (API already caches 1h)
   );
+}
+
+/** User settings (key-value from user_settings table) */
+export function useUserSettings(userId: string | undefined) {
+  const { data, mutate, ...rest } = useSWR<Record<string, string>>(
+    userId ? ["user_settings", userId] : null,
+    async () => {
+      const { data, error } = await supabase
+        .from("user_settings")
+        .select("key, value")
+        .eq("user_id", userId!);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      for (const row of (data ?? []) as UserSetting[]) map[row.key] = row.value;
+      return map;
+    },
+    defaultConfig,
+  );
+
+  const updateSetting = async (settingKey: string, value: string) => {
+    const { error } = await supabase
+      .from("user_settings")
+      .upsert({
+        user_id: userId!,
+        key: settingKey,
+        value,
+        updated_at: new Date().toISOString(),
+      });
+    if (error) throw error;
+    await mutate();
+  };
+
+  return { settings: data ?? {}, updateSetting, mutate, ...rest };
 }

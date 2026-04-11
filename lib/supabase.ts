@@ -110,6 +110,13 @@ export interface StockTransaction {
   created_at: string;
 }
 
+export interface UserSetting {
+  user_id: string;
+  key: string;
+  value: string;
+  updated_at: string;
+}
+
 // ============ Bank / Institution Presets ============
 
 export interface BankPreset {

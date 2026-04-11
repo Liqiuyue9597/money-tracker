@@ -2,40 +2,65 @@
 
 import { useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { formatMoney } from "@/lib/supabase";
+import { formatMoney, type Currency } from "@/lib/supabase";
 import { useMonthTransactions } from "@/lib/swr-hooks";
-import { format } from "date-fns";
+import { format, subMonths, endOfMonth } from "date-fns";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Wallet,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw,
   BarChart3,
 } from "lucide-react";
 
+// ---------- MoM comparison badge ----------
+function MomBadge({
+  current,
+  previous,
+  currency,
+}: {
+  current: number;
+  previous: number | null;
+  currency: Currency;
+}) {
+  if (previous == null || (previous === 0 && current === 0)) return null;
+  const diff = current - previous;
+  if (diff === 0) return null;
+
+  const isUp = diff > 0;
+  const pct = previous > 0 ? (diff / previous) * 100 : null;
+
+  return (
+    <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+      {isUp ? "↑" : "↓"} 比上月{isUp ? "多" : "少"}{" "}
+      {formatMoney(Math.abs(diff), currency)}
+      {pct != null && ` (${isUp ? "+" : ""}${pct.toFixed(1)}%)`}
+    </p>
+  );
+}
+
 export function Dashboard() {
-  const { user, mainCurrency, accounts } = useApp();
+  const { user, mainCurrency, monthlyBudget } = useApp();
   const now = useMemo(() => new Date(), []);
+  const prevMonth = useMemo(() => subMonths(now, 1), [now]);
 
-  // SWR hooks — cached & deduplicated across components
+  // Current & previous month transactions
   const { data: transactions, isLoading: txLoading } = useMonthTransactions(user?.id, now);
+  const { data: prevTransactions } = useMonthTransactions(user?.id, prevMonth);
 
-  // Derive monthly stats
-  const { monthExpense, monthIncome, topCategories, recentTransactions } = useMemo(() => {
-    if (!transactions) return { monthExpense: 0, monthIncome: 0, topCategories: [], recentTransactions: [] };
+  // Derive current month stats
+  const { monthExpense, monthIncome, topCategories } = useMemo(() => {
+    if (!transactions) return { monthExpense: 0, monthIncome: 0, topCategories: [] };
     let exp = 0, inc = 0;
     const catMap: Record<string, { name: string; icon: string; amount: number }> = {};
     for (const t of transactions) {
-      if (t.type === "transfer") continue; // Skip transfers from stats
+      if (t.type === "transfer") continue;
       const amt = Number(t.amount);
       if (t.type === "expense") {
         exp += amt;
-        const catName = t.categories?.name || "\u5176\u4ed6";
-        const catIcon = t.categories?.icon || "\ud83d\udccc";
+        const catName = t.categories?.name || "其他";
+        const catIcon = t.categories?.icon || "📌";
         if (!catMap[catName]) catMap[catName] = { name: catName, icon: catIcon, amount: 0 };
         catMap[catName].amount += amt;
       } else {
@@ -46,11 +71,43 @@ export function Dashboard() {
       monthExpense: exp,
       monthIncome: inc,
       topCategories: Object.values(catMap).sort((a, b) => b.amount - a.amount).slice(0, 5),
-      recentTransactions: transactions.slice(0, 5),
     };
   }, [transactions]);
 
-  const net = monthIncome - monthExpense;
+  // Derive previous month stats
+  const prevMonthStats = useMemo(() => {
+    if (!prevTransactions) return null;
+    let expense = 0, income = 0;
+    const catMap: Record<string, number> = {};
+    for (const t of prevTransactions) {
+      if (t.type === "transfer") continue;
+      const amt = Number(t.amount);
+      if (t.type === "expense") {
+        expense += amt;
+        const catName = t.categories?.name || "其他";
+        catMap[catName] = (catMap[catName] ?? 0) + amt;
+      } else {
+        income += amt;
+      }
+    }
+    return { expense, income, catMap };
+  }, [prevTransactions]);
+
+  // Budget calculations
+  const budgetPct = useMemo(() => {
+    if (monthlyBudget == null || monthlyBudget === 0) return 0;
+    return (monthExpense / monthlyBudget) * 100;
+  }, [monthExpense, monthlyBudget]);
+
+  const budgetRemaining = useMemo(() => {
+    if (monthlyBudget == null) return 0;
+    return monthlyBudget - monthExpense;
+  }, [monthExpense, monthlyBudget]);
+
+  const daysRemaining = useMemo(() => {
+    const today = new Date();
+    return endOfMonth(today).getDate() - today.getDate();
+  }, []);
 
   // Only show full-page spinner on very first load (no cached data yet)
   if (txLoading && !transactions) {
@@ -77,7 +134,7 @@ export function Dashboard() {
         </Link>
       </div>
 
-      {/* Expense / Income cards */}
+      {/* Expense / Income cards with MoM comparison */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <Card className="bg-red-50 border-0 ring-0">
           <CardContent className="pt-0">
@@ -88,6 +145,11 @@ export function Dashboard() {
             <p className="text-xl font-bold text-red-600 tabular-nums">
               {formatMoney(monthExpense, mainCurrency)}
             </p>
+            <MomBadge
+              current={monthExpense}
+              previous={prevMonthStats?.expense ?? null}
+              currency={mainCurrency}
+            />
           </CardContent>
         </Card>
         <Card className="bg-emerald-50 border-0 ring-0">
@@ -99,128 +161,61 @@ export function Dashboard() {
             <p className="text-xl font-bold text-emerald-600 tabular-nums">
               {formatMoney(monthIncome, mainCurrency)}
             </p>
+            <MomBadge
+              current={monthIncome}
+              previous={prevMonthStats?.income ?? null}
+              currency={mainCurrency}
+            />
           </CardContent>
         </Card>
       </div>
 
-      {/* Net income */}
-      <Card className="mb-4 bg-primary/5 border-0 ring-0">
-        <CardContent className="pt-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">本月净收入</p>
-              <p
-                className={`text-2xl font-bold tabular-nums ${
-                  net >= 0 ? "text-emerald-600" : "text-red-600"
+      {/* Budget Progress */}
+      {monthlyBudget != null ? (
+        <Card className="mb-4">
+          <CardContent className="pt-0">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-sm">本月预算</p>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {formatMoney(monthExpense, mainCurrency)} / {formatMoney(monthlyBudget, mainCurrency)}
+              </span>
+            </div>
+            <div className="h-2.5 w-full rounded-full bg-muted">
+              <div
+                className={`h-2.5 rounded-full transition-all duration-500 ${
+                  budgetPct >= 100
+                    ? "bg-red-500"
+                    : budgetPct >= 80
+                      ? "bg-orange-400"
+                      : "bg-emerald-500"
                 }`}
-              >
-                {net >= 0 ? "+" : "-"}
-                {formatMoney(net, mainCurrency)}
-              </p>
+                style={{ width: `${Math.min(budgetPct, 100)}%` }}
+              />
             </div>
-            {net >= 0 ? (
-              <TrendingUp className="h-8 w-8 text-emerald-500/30" />
-            ) : (
-              <TrendingDown className="h-8 w-8 text-red-500/30" />
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Account Summary */}
-      {accounts.length > 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-0">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">账户</span>
-              </div>
-              <Link
-                href="/assets"
-                className="text-xs text-primary hover:underline"
-              >
-                查看全部 →
-              </Link>
-            </div>
-            <div className="space-y-3">
-              {accounts.slice(0, 4).map((acc) => (
-                <div key={acc.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{acc.icon}</span>
-                    <span className="text-sm">{acc.name}</span>
-                  </div>
-                  <span
-                    className={`text-sm font-medium tabular-nums ${
-                      Number(acc.balance) < 0
-                        ? "text-red-600"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {Number(acc.balance) < 0 ? "-" : ""}
-                    {formatMoney(Number(acc.balance), acc.currency)}
-                  </span>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+              <span>
+                {budgetRemaining >= 0
+                  ? `剩余 ${formatMoney(budgetRemaining, mainCurrency)}`
+                  : `超支 ${formatMoney(Math.abs(budgetRemaining), mainCurrency)}`}
+              </span>
+              {daysRemaining > 0 && budgetRemaining > 0 && (
+                <span className="tabular-nums">
+                  日均可用 {formatMoney(budgetRemaining / daysRemaining, mainCurrency)}
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <Link
+          href="/settings"
+          className="block mb-4 text-center text-xs text-muted-foreground hover:text-primary py-3 border border-dashed rounded-xl"
+        >
+          设置每月预算，追踪支出进度 →
+        </Link>
       )}
 
-      {/* Recent Transactions */}
-      {recentTransactions.length > 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-0">
-            <p className="font-medium text-sm mb-3">最近记录</p>
-            <div className="space-y-3">
-              {recentTransactions.map((t) => (
-                <div key={t.id} className="flex items-start justify-between">
-                  <div className="flex items-start gap-2.5">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-lg ${
-                      t.type === "transfer" ? "bg-blue-100" : "bg-muted"
-                    }`}>
-                      {t.type === "transfer" ? "🔄" : (t.categories?.icon || "\ud83d\udccc")}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        {t.type === "transfer" ? "转账" : (t.categories?.name || "未分类")}
-                      </p>
-                      {t.type === "transfer" && t.accounts && t.to_accounts ? (
-                        <p className="text-xs text-muted-foreground">
-                          {t.accounts.name} → {t.to_accounts.name}
-                        </p>
-                      ) : t.note ? (
-                        <p className="text-xs text-muted-foreground">{t.note}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p
-                      className={`text-sm font-medium tabular-nums ${
-                        t.type === "transfer"
-                          ? "text-blue-600"
-                          : t.type === "income"
-                            ? "text-emerald-600"
-                            : "text-foreground"
-                      }`}
-                    >
-                      {t.type === "transfer" ? "" : t.type === "expense" ? "-" : "+"}
-                      {formatMoney(Number(t.amount), t.currency)}
-                    </p>
-                    {t.type !== "transfer" && t.accounts && (
-                      <p className="text-xs text-muted-foreground">
-                        {t.accounts.name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Top Spending Categories */}
+      {/* Top Spending Categories with MoM */}
       {topCategories.length > 0 && (
         <Card className="mb-4">
           <CardContent className="pt-0">
@@ -229,6 +224,9 @@ export function Dashboard() {
               {topCategories.map((cat) => {
                 const pct =
                   monthExpense > 0 ? (cat.amount / monthExpense) * 100 : 0;
+                const prevAmt = prevMonthStats?.catMap[cat.name] ?? 0;
+                const catDiff = prevAmt > 0 ? cat.amount - prevAmt : null;
+                const catDiffPct = prevAmt > 0 && catDiff != null ? (catDiff / prevAmt) * 100 : null;
                 return (
                   <div key={cat.name}>
                     <div className="flex items-center justify-between text-sm mb-1">
@@ -236,8 +234,20 @@ export function Dashboard() {
                         <span>{cat.icon}</span>
                         <span>{cat.name}</span>
                       </span>
-                      <span className="text-muted-foreground tabular-nums">
-                        {formatMoney(cat.amount, mainCurrency)}
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground tabular-nums">
+                          {formatMoney(cat.amount, mainCurrency)}
+                        </span>
+                        {catDiffPct != null && catDiff !== 0 && (
+                          <span
+                            className={`text-[10px] tabular-nums ${
+                              catDiff! > 0 ? "text-red-400" : "text-emerald-400"
+                            }`}
+                          >
+                            {catDiff! > 0 ? "↑" : "↓"}
+                            {Math.abs(catDiffPct).toFixed(0)}%
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-muted">
