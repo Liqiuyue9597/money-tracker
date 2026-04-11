@@ -259,12 +259,8 @@ export function AssetSankey({
     return { nodes: nodeList, links: linkList, totalAssets: total, netWorth: net, debtRatio: ratio };
   }, [cashTotal, stockValue, cryptoValue, debtTotal, excludedTotal]);
 
-  // Don't render if no meaningful data
-  if (nodes.length === 0 || links.length === 0) {
-    return null;
-  }
-
   // Create a node renderer that captures totalAssets and mainCurrency
+  // Must be before early return to satisfy Rules of Hooks
   const nodeRenderer = useMemo(
     () =>
       function SankeyNode(props: SankeyNodeProps) {
@@ -272,6 +268,11 @@ export function AssetSankey({
       },
     [mainCurrency, totalAssets],
   );
+
+  // Don't render if no meaningful data
+  if (nodes.length === 0 || links.length === 0) {
+    return null;
+  }
 
   return (
     <Card className="mb-4 border-0 shadow-sm">
