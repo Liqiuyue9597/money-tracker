@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   Wallet, Plus, TrendingUp, TrendingDown, RefreshCw,
   DollarSign, CreditCard, Landmark, Banknote, Bitcoin, Trash2,
@@ -263,15 +264,15 @@ export function AssetOverview() {
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5" /> 股票
           </div>
-          <a href="/stocks" className="text-xs text-primary font-medium">
+          <Link href="/stocks" className="text-xs text-primary font-medium">
             管理
-          </a>
+          </Link>
         </div>
 
         {holdings && holdings.length > 0 ? (
           <Card className="border-0 shadow-sm overflow-hidden">
             <CardContent className="p-0">
-              <a href="/stocks" className="block px-4 py-3.5 hover:bg-muted/50 transition-colors">
+              <Link href="/stocks" className="block px-4 py-3.5 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">📈</span>
                   <div className="flex-1 text-left">
@@ -297,7 +298,7 @@ export function AssetOverview() {
                     )}
                   </div>
                 </div>
-              </a>
+              </Link>
             </CardContent>
           </Card>
         ) : holdingsLoading ? (
@@ -310,11 +311,11 @@ export function AssetOverview() {
           <Card className="border-0 shadow-sm">
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">暂无股票持仓</p>
-              <a href="/stocks">
+              <Link href="/stocks">
                 <Button variant="outline" size="sm" className="mt-2 rounded-xl">
                   <Plus className="h-4 w-4 mr-1" /> 添加股票
                 </Button>
-              </a>
+              </Link>
             </CardContent>
           </Card>
         )}
