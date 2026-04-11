@@ -215,13 +215,6 @@ export function AssetSankey({
       nodeList.push({ name: "负债" });
     }
 
-    // Left-side: add excluded accounts after right-side nodes
-    let excludedIdx = -1;
-    if (excludedTotal > 0) {
-      excludedIdx = nodeList.length;
-      nodeList.push({ name: "公积金等", isExcluded: true });
-    }
-
     // Build links: each left node → 总资产
     let linkIdx = 0;
     if (cashTotal > 0) {
@@ -244,12 +237,6 @@ export function AssetSankey({
         linkList.push({ source: cashNodeIdx, target: debtIdx, value: debtTotal });
       }
       // If no cash node, skip the debt link entirely rather than linking from an unrelated node
-    }
-
-    // Excluded accounts need a link to show in Sankey
-    // (Sankey rendering constraint: all nodes must participate in links — not a real financial relationship)
-    if (excludedTotal > 0 && excludedIdx >= 0) {
-      linkList.push({ source: excludedIdx, target: totalAssetsIdx, value: excludedTotal });
     }
 
     const total = cashTotal + stockValue + cryptoValue;
