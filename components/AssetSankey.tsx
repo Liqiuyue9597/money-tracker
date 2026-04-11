@@ -37,11 +37,20 @@ interface SankeyLinkPayload {
   value: number;
 }
 
-function CustomNode(props: SankeyNodeProps) {
-  const { x, y, width, height, index, payload } = props;
-  const { name = "", isExcluded = false } = (payload as SankeyNodePayload) ?? {};
+function CustomNode(
+  props: SankeyNodeProps & { mainCurrency?: Currency; totalAssets?: number },
+) {
+  const { x, y, width, height, index, payload, mainCurrency, totalAssets } =
+    props;
+  const { name = "", isExcluded = false, value: nodeValue = 0 } =
+    (payload as SankeyNodePayload & { value?: number }) ?? {};
   const color = NODE_COLORS[name] || "#94a3b8";
   const isRight = name === "总资产" || name === "负债";
+  const pct =
+    totalAssets && totalAssets > 0 && !isRight
+      ? ((nodeValue / totalAssets) * 100).toFixed(0)
+      : null;
+  const currency = mainCurrency ?? "CNY";
 
   return (
     <Layer key={`node-${index}`}>
@@ -58,7 +67,7 @@ function CustomNode(props: SankeyNodeProps) {
       />
       <text
         x={isRight ? x + width + 8 : x - 8}
-        y={y + height / 2 - 6}
+        y={y + height / 2 + (isExcluded ? -12 : pct ? -10 : -2)}
         textAnchor={isRight ? "start" : "end"}
         fontSize={11}
         fontWeight={600}
@@ -66,15 +75,43 @@ function CustomNode(props: SankeyNodeProps) {
       >
         {name}
       </text>
-      <text
-        x={isRight ? x + width + 8 : x - 8}
-        y={y + height / 2 + 10}
-        textAnchor={isRight ? "start" : "end"}
-        fontSize={9}
-        fill="#888"
-      >
-        {isExcluded ? "不计入净值" : ""}
-      </text>
+      {/* Amount + percentage for non-right nodes */}
+      {!isRight && !isExcluded && nodeValue > 0 && (
+        <text
+          x={isRight ? x + width + 8 : x - 8}
+          y={y + height / 2 + 4}
+          textAnchor={isRight ? "start" : "end"}
+          fontSize={9}
+          fill="#888"
+        >
+          {formatMoney(nodeValue, currency)}
+          {pct ? ` · ${pct}%` : ""}
+        </text>
+      )}
+      {/* Right-side nodes: show amount below name */}
+      {isRight && nodeValue > 0 && (
+        <text
+          x={x + width + 8}
+          y={y + height / 2 + 10}
+          textAnchor="start"
+          fontSize={9}
+          fill="#888"
+        >
+          {formatMoney(nodeValue, currency)}
+        </text>
+      )}
+      {/* Excluded label */}
+      {isExcluded && (
+        <text
+          x={x - 8}
+          y={y + height / 2 + 4}
+          textAnchor="end"
+          fontSize={9}
+          fill="#aaa"
+        >
+          不计入净值
+        </text>
+      )}
     </Layer>
   );
 }
@@ -103,11 +140,12 @@ function CustomLink(props: SankeyLinkProps) {
     <Layer>
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={sourceColor} stopOpacity={0.4} />
+          <stop offset="0%" stopColor={sourceColor} stopOpacity={0.5} />
+          <stop offset="40%" stopColor={sourceColor} stopOpacity={0.3} />
           <stop
             offset="100%"
             stopColor={isDebt ? "#f87171" : targetColor}
-            stopOpacity={0.2}
+            stopOpacity={0.15}
           />
         </linearGradient>
       </defs>
@@ -152,7 +190,7 @@ export function AssetSankey({
     return () => observer.disconnect();
   }, []);
 
-  const { nodes, links, netWorth, debtRatio } = useMemo(() => {
+  const { nodes, links, totalAssets, netWorth, debtRatio } = useMemo(() => {
     const nodeList: { name: string; isExcluded?: boolean }[] = [];
     const linkList: { source: number; target: number; value: number }[] = [];
 
@@ -218,13 +256,22 @@ export function AssetSankey({
     const net = total - debtTotal;
     const ratio = total > 0 ? (debtTotal / total) * 100 : 0;
 
-    return { nodes: nodeList, links: linkList, netWorth: net, debtRatio: ratio };
+    return { nodes: nodeList, links: linkList, totalAssets: total, netWorth: net, debtRatio: ratio };
   }, [cashTotal, stockValue, cryptoValue, debtTotal, excludedTotal]);
 
   // Don't render if no meaningful data
   if (nodes.length === 0 || links.length === 0) {
     return null;
   }
+
+  // Create a node renderer that captures totalAssets and mainCurrency
+  const nodeRenderer = useMemo(
+    () =>
+      function SankeyNode(props: SankeyNodeProps) {
+        return CustomNode({ ...props, mainCurrency, totalAssets });
+      },
+    [mainCurrency, totalAssets],
+  );
 
   return (
     <Card className="mb-4 border-0 shadow-sm">
@@ -233,15 +280,15 @@ export function AssetSankey({
         <div ref={containerRef}>
         <Sankey
           width={chartWidth}
-          height={Math.max(200, nodes.length * 45)}
+          height={Math.max(220, nodes.length * 55)}
           data={{ nodes, links }}
-          node={CustomNode}
+          node={nodeRenderer}
           link={CustomLink}
           nodeWidth={14}
-          nodePadding={16}
+          nodePadding={24}
           linkCurvature={0.5}
           iterations={32}
-          margin={{ top: 8, right: 80, bottom: 8, left: 80 }}
+          margin={{ top: 8, right: 100, bottom: 8, left: 100 }}
         >
           <Tooltip
             content={({ payload }) => {
