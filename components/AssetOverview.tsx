@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccountManager } from "@/components/AccountManager";
+import { AssetSankey } from "@/components/AssetSankey";
 import {
   Dialog,
   DialogContent,
@@ -96,6 +97,28 @@ export function AssetOverview() {
     return netWorth;
   }, [accounts, mainCurrency, rateMap, stockValue, totalCryptoValue]);
 
+  // Sankey chart derived values
+  const { cashTotal, debtTotal, excludedTotal, cryptoValueInMain } = useMemo(() => {
+    let cash = 0;
+    let debt = 0;
+    let excluded = 0;
+    for (const acc of accounts) {
+      if (acc.type !== "cash") continue;
+      const bal = convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
+      if (acc.exclude_from_total) {
+        excluded += Math.abs(bal);
+      } else if (bal >= 0) {
+        cash += bal;
+      } else {
+        debt += Math.abs(bal);
+      }
+    }
+    const cryptoMain = totalCryptoValue > 0
+      ? convertCurrency(totalCryptoValue, "USD", mainCurrency, rateMap)
+      : 0;
+    return { cashTotal: cash, debtTotal: debt, excludedTotal: excluded, cryptoValueInMain: cryptoMain };
+  }, [accounts, mainCurrency, rateMap, totalCryptoValue]);
+
   async function handleAddCrypto() {
     if (!user || !cryptoQty || !cryptoBuyPrice) { toast.error("请填写完整"); return; }
     setAddingCrypto(true);
@@ -162,6 +185,16 @@ export function AssetOverview() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Asset Composition Sankey */}
+      <AssetSankey
+        cashTotal={cashTotal}
+        stockValue={stockValue}
+        cryptoValue={cryptoValueInMain}
+        debtTotal={debtTotal}
+        excludedTotal={excludedTotal}
+        mainCurrency={mainCurrency}
+      />
 
       {/* Positive balance accounts */}
       {positiveAccounts.length > 0 && (
