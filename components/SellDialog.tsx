@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { type Account, type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ export function SellDialog({
 
   const sortedAccounts = useMemo(() => {
     const cash = accounts.filter((a) => a.type === "cash");
-    return cash.sort((a, b) => {
+    return [...cash].sort((a, b) => {
       const aMatch = a.currency === holdingCurrency ? 0 : 1;
       const bMatch = b.currency === holdingCurrency ? 0 : 1;
       return aMatch - bMatch;
@@ -51,7 +51,7 @@ export function SellDialog({
   const qty = parseFloat(quantity);
   const prc = parseFloat(price);
   const isValid = qty > 0 && qty <= currentQuantity && prc > 0 && accountId !== "";
-  const isClearAll = qty === currentQuantity;
+  const isClearAll = Math.abs(qty - currentQuantity) < 1e-9;
 
   // Preview
   const remainingQuantity = isValid ? currentQuantity - qty : null;
@@ -63,10 +63,6 @@ export function SellDialog({
   async function handleConfirm() {
     if (!isValid) {
       toast.error("请填写完整信息");
-      return;
-    }
-    if (qty > currentQuantity) {
-      toast.error(`卖出数量不能超过持仓数量 (${currentQuantity})`);
       return;
     }
     setLoading(true);

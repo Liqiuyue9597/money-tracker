@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
-import { type Account, type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ export function BuyDialog({
   // Sort accounts: same currency first
   const sortedAccounts = useMemo(() => {
     const cash = accounts.filter((a) => a.type === "cash");
-    return cash.sort((a, b) => {
+    return [...cash].sort((a, b) => {
       const aMatch = a.currency === holdingCurrency ? 0 : 1;
       const bMatch = b.currency === holdingCurrency ? 0 : 1;
       return aMatch - bMatch;
@@ -176,6 +176,13 @@ export function BuyDialog({
                 </div>
               )}
               <div className="text-muted-foreground mt-1">💡 确认后可手动修改成本价</div>
+            </div>
+          )}
+
+          {/* Negative balance warning */}
+          {isValid && remainingBalance != null && remainingBalance < 0 && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
+              ⚠️ 账户余额不足，操作后将为负数
             </div>
           )}
 

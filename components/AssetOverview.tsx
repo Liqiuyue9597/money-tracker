@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { AccountManager } from "@/components/AccountManager";
 import { BuyDialog } from "@/components/BuyDialog";
 import { SellDialog } from "@/components/SellDialog";
+import { executeBuy, executeSell } from "@/lib/trading";
 import { AssetSankey } from "@/components/AssetSankey";
 import {
   Dialog,
@@ -169,95 +170,48 @@ export function AssetOverview() {
     const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
     if (!holding) return;
 
-    const oldQty = Number(holding.quantity);
-    const oldPrice = Number(holding.buy_price);
-    const newQty = oldQty + data.quantity;
-    const newAvgCost = (oldQty * oldPrice + data.quantity * data.price) / newQty;
-
     try {
-      const { error: holdingError } = await supabase
-        .from("crypto_holdings")
-        .update({ quantity: newQty, buy_price: newAvgCost })
-        .eq("id", holdingId);
-
-      if (holdingError) {
-        toast.error("买入失败: " + holdingError.message);
-        throw holdingError;
-      }
-
-      const account = accounts.find((a) => a.id === data.accountId);
-      if (account) {
-        const deductAmount = data.quantity * data.price;
-        const newBalance = Number(account.balance) - deductAmount;
-        const { error: accountError } = await supabase
-          .from("accounts")
-          .update({ balance: newBalance })
-          .eq("id", data.accountId);
-
-        if (accountError) {
-          toast.error("账户余额更新失败: " + accountError.message);
-          throw accountError;
-        }
-      }
+      await executeBuy({
+        table: "crypto_holdings",
+        holdingId,
+        oldQty: Number(holding.quantity),
+        oldPrice: Number(holding.buy_price),
+        buyQty: data.quantity,
+        buyPrice: data.price,
+        accountId: data.accountId,
+      });
 
       toast.success(`已买入 ${data.quantity} ${holding.symbol}`);
       mutateCrypto();
       refreshAccounts();
     } catch (err) {
       console.error("Crypto buy failed:", err);
+      toast.error("买入失败");
       throw err;
     }
   }
 
   async function handleSellCrypto(holdingId: string, data: { quantity: number; price: number; accountId: string; isClearAll: boolean }) {
+    const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
+
     try {
-      if (data.isClearAll) {
-        const { error: holdingError } = await supabase
-          .from("crypto_holdings")
-          .delete()
-          .eq("id", holdingId);
+      await executeSell({
+        table: "crypto_holdings",
+        holdingId,
+        currentQty: Number(holding?.quantity ?? 0),
+        sellQty: data.quantity,
+        sellPrice: data.price,
+        accountId: data.accountId,
+        isClearAll: data.isClearAll,
+      });
 
-        if (holdingError) {
-          toast.error("卖出失败: " + holdingError.message);
-          throw holdingError;
-        }
-      } else {
-        const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
-        if (!holding) return;
-        const newQty = Number(holding.quantity) - data.quantity;
-        const { error: holdingError } = await supabase
-          .from("crypto_holdings")
-          .update({ quantity: newQty })
-          .eq("id", holdingId);
-
-        if (holdingError) {
-          toast.error("卖出失败: " + holdingError.message);
-          throw holdingError;
-        }
-      }
-
-      const account = accounts.find((a) => a.id === data.accountId);
-      if (account) {
-        const receiveAmount = data.quantity * data.price;
-        const newBalance = Number(account.balance) + receiveAmount;
-        const { error: accountError } = await supabase
-          .from("accounts")
-          .update({ balance: newBalance })
-          .eq("id", data.accountId);
-
-        if (accountError) {
-          toast.error("账户余额更新失败: " + accountError.message);
-          throw accountError;
-        }
-      }
-
-      const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
       toast.success(`已卖出 ${data.quantity} ${holding?.symbol ?? ""}`);
       setExpandedCryptoId(null);
       mutateCrypto();
       refreshAccounts();
     } catch (err) {
       console.error("Crypto sell failed:", err);
+      toast.error("卖出失败");
       throw err;
     }
   }
