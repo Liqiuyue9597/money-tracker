@@ -53,6 +53,7 @@ export function BuyDialog({
   }, [accounts, holdingCurrency]);
 
   const selectedAccount = sortedAccounts.find((a) => a.id === accountId);
+  const currencyMismatch = selectedAccount && selectedAccount.currency !== holdingCurrency;
 
   const qty = parseFloat(quantity);
   const prc = parseFloat(price);
@@ -151,6 +152,13 @@ export function BuyDialog({
               ))}
             </select>
           </div>
+
+          {/* Currency mismatch warning */}
+          {currencyMismatch && (
+            <div className="rounded-xl bg-red-50 border border-red-300 p-2 text-xs text-red-800">
+              ⚠️ 币种不匹配：持仓为 {CURRENCIES[holdingCurrency].name}（{holdingCurrency}），账户为 {CURRENCIES[selectedAccount.currency].name}（{selectedAccount.currency}）。扣款金额将以 {holdingCurrency} 计算直接扣减，不做汇率转换。
+            </div>
+          )}
 
           {/* Preview */}
           {isValid && newQuantity != null && newAvgCost != null && deductAmount != null && (
