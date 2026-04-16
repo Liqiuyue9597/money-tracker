@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { BuyDialog } from "@/components/BuyDialog";
+import { SellDialog } from "@/components/SellDialog";
 
 /** Get type label for display */
 function getTypeLabel(type: StockAssetType): string {
@@ -29,7 +31,7 @@ function getTypeLabel(type: StockAssetType): string {
 }
 
 export function StockPortfolio() {
-  const { user, mainCurrency } = useApp();
+  const { user, mainCurrency, accounts, refreshAccounts } = useApp();
 
   // SWR hooks
   const { data: holdings = [], isLoading: loading, mutate: mutateHoldings } = useStockHoldings(user?.id);
@@ -60,6 +62,13 @@ export function StockPortfolio() {
   const [editSymbol, setEditSymbol] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Expandable card state
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Buy/Sell dialog state
+  const [buyHolding, setBuyHolding] = useState<StockHolding | null>(null);
+  const [sellHolding, setSellHolding] = useState<StockHolding | null>(null);
 
   async function handleRefreshQuotes() {
     if (stockSymbols.length === 0) return;
@@ -161,6 +170,105 @@ export function StockPortfolio() {
     } catch (err) {
       console.error(err);
       toast.error("保存价格失败");
+    }
+  }
+
+  async function handleBuy(holdingId: string, data: { quantity: number; price: number; accountId: string }) {
+    const holding = holdings.find((h) => h.id === holdingId);
+    if (!holding) return;
+
+    const oldQty = Number(holding.quantity);
+    const oldPrice = Number(holding.buy_price);
+    const newQty = oldQty + data.quantity;
+    const newAvgCost = (oldQty * oldPrice + data.quantity * data.price) / newQty;
+
+    try {
+      // Update holding
+      const { error: holdingError } = await supabase
+        .from("stock_holdings")
+        .update({ quantity: newQty, buy_price: newAvgCost })
+        .eq("id", holdingId);
+
+      if (holdingError) {
+        toast.error("买入失败: " + holdingError.message);
+        throw holdingError;
+      }
+
+      // Update account balance
+      const account = accounts.find((a) => a.id === data.accountId);
+      if (account) {
+        const deductAmount = data.quantity * data.price;
+        const newBalance = Number(account.balance) - deductAmount;
+        const { error: accountError } = await supabase
+          .from("accounts")
+          .update({ balance: newBalance })
+          .eq("id", data.accountId);
+
+        if (accountError) {
+          toast.error("账户余额更新失败: " + accountError.message);
+          throw accountError;
+        }
+      }
+
+      toast.success(`已买入 ${data.quantity} ${holding.symbol}`);
+      mutateHoldings();
+      refreshAccounts();
+    } catch (err) {
+      console.error("Buy failed:", err);
+      throw err;
+    }
+  }
+
+  async function handleSell(holdingId: string, data: { quantity: number; price: number; accountId: string; isClearAll: boolean }) {
+    try {
+      if (data.isClearAll) {
+        const { error: holdingError } = await supabase
+          .from("stock_holdings")
+          .delete()
+          .eq("id", holdingId);
+
+        if (holdingError) {
+          toast.error("卖出失败: " + holdingError.message);
+          throw holdingError;
+        }
+      } else {
+        const holding = holdings.find((h) => h.id === holdingId);
+        if (!holding) return;
+        const newQty = Number(holding.quantity) - data.quantity;
+        const { error: holdingError } = await supabase
+          .from("stock_holdings")
+          .update({ quantity: newQty })
+          .eq("id", holdingId);
+
+        if (holdingError) {
+          toast.error("卖出失败: " + holdingError.message);
+          throw holdingError;
+        }
+      }
+
+      const account = accounts.find((a) => a.id === data.accountId);
+      if (account) {
+        const receiveAmount = data.quantity * data.price;
+        const newBalance = Number(account.balance) + receiveAmount;
+        const { error: accountError } = await supabase
+          .from("accounts")
+          .update({ balance: newBalance })
+          .eq("id", data.accountId);
+
+        if (accountError) {
+          toast.error("账户余额更新失败: " + accountError.message);
+          throw accountError;
+        }
+      }
+
+      const holding = holdings.find((h) => h.id === holdingId);
+      toast.success(`已卖出 ${data.quantity} ${holding?.symbol ?? ""}`);
+      setExpandedId(null);
+      mutateHoldings();
+      refreshAccounts();
+    } catch (err) {
+      console.error("Sell failed:", err);
+      throw err;
     }
   }
 
@@ -440,9 +548,18 @@ export function StockPortfolio() {
                   const isManual = !quote?.price && h.manual_price != null && h.manual_price > 0;
 
                   return (
-                    <Card key={h.id} className="border-0 shadow-sm overflow-hidden">
+                    <Card
+                      key={h.id}
+                      className={`border-0 shadow-sm overflow-hidden transition-all ${
+                        expandedId === h.id ? "ring-1 ring-primary/20" : ""
+                      }`}
+                    >
                       <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
+                        {/* Clickable card header */}
+                        <div
+                          className="flex items-start justify-between cursor-pointer"
+                          onClick={() => setExpandedId(expandedId === h.id ? null : h.id)}
+                        >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm">{h.symbol}</span>
@@ -481,29 +598,51 @@ export function StockPortfolio() {
                               </>
                             ) : (
                               <button
-                                onClick={() => openEditDialog(h.symbol, 0)}
+                                onClick={(e) => { e.stopPropagation(); openEditDialog(h.symbol, 0); }}
                                 className="text-xs text-primary hover:underline"
                               >
                                 手动输入价格
                               </button>
                             )}
                           </div>
-                          <div className="flex flex-col ml-1 gap-0.5">
+                          <span className={`ml-2 text-muted-foreground transition-transform ${expandedId === h.id ? "rotate-90" : ""}`}>
+                            ›
+                          </span>
+                        </div>
+
+                        {/* Expanded action bar */}
+                        {expandedId === h.id && (
+                          <div className="border-t mt-3 pt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              className="flex-1 rounded-xl text-xs"
+                              onClick={() => setBuyHolding(h)}
+                            >
+                              📈 买入
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 rounded-xl text-xs"
+                              onClick={() => setSellHolding(h)}
+                            >
+                              📉 卖出
+                            </Button>
                             <button
                               onClick={() => openEditDialog(h.symbol, currentPrice)}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                               title="手动更新价格"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => handleDelete(h.id)}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                        </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -512,6 +651,34 @@ export function StockPortfolio() {
             </div>
           );
         })
+      )}
+
+      {/* Buy Dialog */}
+      {buyHolding && (
+        <BuyDialog
+          open={!!buyHolding}
+          onOpenChange={(open) => { if (!open) setBuyHolding(null); }}
+          symbol={buyHolding.symbol}
+          currentQuantity={Number(buyHolding.quantity)}
+          currentBuyPrice={Number(buyHolding.buy_price)}
+          holdingCurrency={buyHolding.currency as Currency}
+          unitLabel={buyHolding.asset_type === "fund" ? "份" : "股"}
+          onConfirm={(data) => handleBuy(buyHolding.id, data)}
+        />
+      )}
+
+      {/* Sell Dialog */}
+      {sellHolding && (
+        <SellDialog
+          open={!!sellHolding}
+          onOpenChange={(open) => { if (!open) setSellHolding(null); }}
+          symbol={sellHolding.symbol}
+          currentQuantity={Number(sellHolding.quantity)}
+          currentBuyPrice={Number(sellHolding.buy_price)}
+          holdingCurrency={sellHolding.currency as Currency}
+          unitLabel={sellHolding.asset_type === "fund" ? "份" : "股"}
+          onConfirm={(data) => handleSell(sellHolding.id, data)}
+        />
       )}
 
       {/* Manual Price Edit Dialog */}
