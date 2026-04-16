@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccountManager } from "@/components/AccountManager";
+import { BuyDialog } from "@/components/BuyDialog";
+import { SellDialog } from "@/components/SellDialog";
 import { AssetSankey } from "@/components/AssetSankey";
 import {
   Dialog,
@@ -47,6 +49,11 @@ export function AssetOverview() {
   const [cryptoQty, setCryptoQty] = useState("");
   const [cryptoBuyPrice, setCryptoBuyPrice] = useState("");
   const [addingCrypto, setAddingCrypto] = useState(false);
+
+  // Expandable crypto card state
+  const [expandedCryptoId, setExpandedCryptoId] = useState<string | null>(null);
+  const [cryptoBuyHolding, setCryptoBuyHolding] = useState<CryptoHolding | null>(null);
+  const [cryptoSellHolding, setCryptoSellHolding] = useState<CryptoHolding | null>(null);
 
   const loading = !holdings && !cryptoHoldings;
   const rateMap = rates?.rates || { CNY: 1, USD: 0.137, HKD: 1.07 };
@@ -156,6 +163,103 @@ export function AssetOverview() {
       { revalidate: false }
     );
     toast.success("已删除");
+  }
+
+  async function handleBuyCrypto(holdingId: string, data: { quantity: number; price: number; accountId: string }) {
+    const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
+    if (!holding) return;
+
+    const oldQty = Number(holding.quantity);
+    const oldPrice = Number(holding.buy_price);
+    const newQty = oldQty + data.quantity;
+    const newAvgCost = (oldQty * oldPrice + data.quantity * data.price) / newQty;
+
+    try {
+      const { error: holdingError } = await supabase
+        .from("crypto_holdings")
+        .update({ quantity: newQty, buy_price: newAvgCost })
+        .eq("id", holdingId);
+
+      if (holdingError) {
+        toast.error("买入失败: " + holdingError.message);
+        throw holdingError;
+      }
+
+      const account = accounts.find((a) => a.id === data.accountId);
+      if (account) {
+        const deductAmount = data.quantity * data.price;
+        const newBalance = Number(account.balance) - deductAmount;
+        const { error: accountError } = await supabase
+          .from("accounts")
+          .update({ balance: newBalance })
+          .eq("id", data.accountId);
+
+        if (accountError) {
+          toast.error("账户余额更新失败: " + accountError.message);
+          throw accountError;
+        }
+      }
+
+      toast.success(`已买入 ${data.quantity} ${holding.symbol}`);
+      mutateCrypto();
+      refreshAccounts();
+    } catch (err) {
+      console.error("Crypto buy failed:", err);
+      throw err;
+    }
+  }
+
+  async function handleSellCrypto(holdingId: string, data: { quantity: number; price: number; accountId: string; isClearAll: boolean }) {
+    try {
+      if (data.isClearAll) {
+        const { error: holdingError } = await supabase
+          .from("crypto_holdings")
+          .delete()
+          .eq("id", holdingId);
+
+        if (holdingError) {
+          toast.error("卖出失败: " + holdingError.message);
+          throw holdingError;
+        }
+      } else {
+        const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
+        if (!holding) return;
+        const newQty = Number(holding.quantity) - data.quantity;
+        const { error: holdingError } = await supabase
+          .from("crypto_holdings")
+          .update({ quantity: newQty })
+          .eq("id", holdingId);
+
+        if (holdingError) {
+          toast.error("卖出失败: " + holdingError.message);
+          throw holdingError;
+        }
+      }
+
+      const account = accounts.find((a) => a.id === data.accountId);
+      if (account) {
+        const receiveAmount = data.quantity * data.price;
+        const newBalance = Number(account.balance) + receiveAmount;
+        const { error: accountError } = await supabase
+          .from("accounts")
+          .update({ balance: newBalance })
+          .eq("id", data.accountId);
+
+        if (accountError) {
+          toast.error("账户余额更新失败: " + accountError.message);
+          throw accountError;
+        }
+      }
+
+      const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
+      toast.success(`已卖出 ${data.quantity} ${holding?.symbol ?? ""}`);
+      setExpandedCryptoId(null);
+      mutateCrypto();
+      refreshAccounts();
+    } catch (err) {
+      console.error("Crypto sell failed:", err);
+      throw err;
+    }
   }
 
   if (loading) {
@@ -370,32 +474,65 @@ export function AssetOverview() {
                   const info = CRYPTO_SYMBOLS[h.symbol];
 
                   return (
-                    <div key={h.id} className={`flex items-center gap-3 px-4 py-3.5 ${i > 0 ? "border-t" : ""}`}>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-bold text-lg">
-                        {info?.icon || h.symbol.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-sm">{h.symbol}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1.5">{Number(h.quantity).toFixed(4)}</Badge>
+                    <div key={h.id} className={`${i > 0 ? "border-t" : ""}`}>
+                      <div
+                        className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-muted/50 transition-colors ${
+                          expandedCryptoId === h.id ? "bg-muted/30" : ""
+                        }`}
+                        onClick={() => setExpandedCryptoId(expandedCryptoId === h.id ? null : h.id)}
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-bold text-lg">
+                          {info?.icon || h.symbol.charAt(0)}
                         </div>
-                        <div className="text-xs text-muted-foreground">{info?.name || h.name}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-sm">{h.symbol}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5">{Number(h.quantity).toFixed(4)}</Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground">{info?.name || h.name}</div>
+                        </div>
+                        <div className="text-right">
+                          {price > 0 ? (
+                            <>
+                              <div className="font-semibold tabular-nums text-sm">${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                              <div className={`text-xs tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                                {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">加载中</div>
+                          )}
+                        </div>
+                        <span className={`text-muted-foreground transition-transform ${expandedCryptoId === h.id ? "rotate-90" : ""}`}>
+                          ›
+                        </span>
                       </div>
-                      <div className="text-right">
-                        {price > 0 ? (
-                          <>
-                            <div className="font-semibold tabular-nums text-sm">${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                            <div className={`text-xs tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                              {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">加载中</div>
-                        )}
-                      </div>
-                      <button onClick={() => handleDeleteCrypto(h.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {/* Expanded action bar */}
+                      {expandedCryptoId === h.id && (
+                        <div className="border-t px-4 py-3 flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1 rounded-xl text-xs"
+                            onClick={() => setCryptoBuyHolding(h)}
+                          >
+                            📈 买入
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 rounded-xl text-xs"
+                            onClick={() => setCryptoSellHolding(h)}
+                          >
+                            📉 卖出
+                          </Button>
+                          <button
+                            onClick={() => handleDeleteCrypto(h.id)}
+                            className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -454,6 +591,34 @@ export function AssetOverview() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Crypto Buy Dialog */}
+      {cryptoBuyHolding && (
+        <BuyDialog
+          open={!!cryptoBuyHolding}
+          onOpenChange={(open) => { if (!open) setCryptoBuyHolding(null); }}
+          symbol={cryptoBuyHolding.symbol}
+          currentQuantity={Number(cryptoBuyHolding.quantity)}
+          currentBuyPrice={Number(cryptoBuyHolding.buy_price)}
+          holdingCurrency="USD"
+          unitLabel=""
+          onConfirm={(data) => handleBuyCrypto(cryptoBuyHolding.id, data)}
+        />
+      )}
+
+      {/* Crypto Sell Dialog */}
+      {cryptoSellHolding && (
+        <SellDialog
+          open={!!cryptoSellHolding}
+          onOpenChange={(open) => { if (!open) setCryptoSellHolding(null); }}
+          symbol={cryptoSellHolding.symbol}
+          currentQuantity={Number(cryptoSellHolding.quantity)}
+          currentBuyPrice={Number(cryptoSellHolding.buy_price)}
+          holdingCurrency="USD"
+          unitLabel=""
+          onConfirm={(data) => handleSellCrypto(cryptoSellHolding.id, data)}
+        />
+      )}
 
       <AccountManager open={managerOpen} onOpenChange={setManagerOpen} editAccount={editAccount} />
     </div>
