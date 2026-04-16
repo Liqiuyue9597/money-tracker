@@ -1,8 +1,12 @@
-# 股票/基金买入卖出功能设计
+# 股票/基金/加密货币买入卖出功能设计
 
 ## 概述
 
-为投资组合页面（StockPortfolio）添加买入（加仓）和卖出（减仓）功能。用户可以在持仓卡片上操作，系统自动更新持仓数量、成本价以及关联现金账户余额。不保留交易历史记录。
+为投资组合页面（StockPortfolio）和资产总览页面（AssetOverview 的加密货币部分）添加买入（加仓）和卖出（减仓）功能。用户可以在持仓卡片上操作，系统自动更新持仓数量、成本价以及关联现金账户余额。不保留交易历史记录。
+
+涉及两类资产，交互模式一致：
+- **股票/基金**：在 StockPortfolio 组件中操作，数据表为 `stock_holdings`
+- **加密货币**：在 AssetOverview 组件的加密货币区域操作，数据表为 `crypto_holdings`
 
 ## 需求摘要
 
@@ -69,11 +73,13 @@
 
 ## 数据操作
 
+以下操作对 stock_holdings 和 crypto_holdings 通用，区别仅在于表名。
+
 ### 买入
 
 一次操作同时更新两条记录（应在同一逻辑中顺序执行）：
 
-1. **更新 stock_holdings：**
+1. **更新 stock_holdings / crypto_holdings：**
    - `quantity` = 原数量 + 买入数量
    - `buy_price` = (原数量 × 原 buy_price + 买入数量 × 买入单价) ÷ 新 quantity
 
@@ -83,8 +89,8 @@
 ### 卖出
 
 1. **判断是否清仓：**
-   - 如果卖出数量 = 当前 quantity → 删除 stock_holdings 记录
-   - 否则 → 更新 stock_holdings.quantity = quantity - 卖出数量（buy_price 不变）
+   - 如果卖出数量 = 当前 quantity → 删除 stock_holdings / crypto_holdings 记录
+   - 否则 → 更新 quantity = quantity - 卖出数量（buy_price 不变）
 
 2. **更新 accounts：**
    - `balance` = balance + (卖出数量 × 卖出单价)
@@ -95,11 +101,15 @@
 
 ### 币种处理
 
-扣款/收款金额以持仓币种计算。如果关联账户的币种与持仓币种不同，暂不做汇率转换——用户需要自行选择同币种的账户。UI 层面在账户下拉中将同币种的账户排在前面，不同币种的账户仍然可选但排在后面。
+**股票/基金：** 扣款/收款金额以持仓币种（CNY/USD/HKD）计算。UI 层面在账户下拉中将同币种的账户排在前面，不同币种的账户仍然可选但排在后面。
+
+**加密货币：** 成本价始终以 USD 计价（现有设计）。扣款/收款金额以 USD 计算。账户下拉同样优先展示 USD 账户。
+
+两者都暂不做跨币种汇率转换——用户需要自行选择合适的账户。
 
 ## UI 组件变更
 
-### StockPortfolio.tsx
+### StockPortfolio.tsx（股票/基金）
 
 **新增状态：**
 - `expandedHoldingId: string | null` — 当前展开的持仓卡片 ID
@@ -114,6 +124,20 @@
 **新增子组件（可以内联在 StockPortfolio 中，也可拆分）：**
 - `BuyDialog` — 买入对话框
 - `SellDialog` — 卖出对话框
+
+### AssetOverview.tsx（加密货币）
+
+**改造加密货币卡片：**
+- 现有的加密货币持仓卡片（目前只有删除按钮）→ 改为和股票一样的展开/收起模式
+- 展开区域包含操作按钮（买入、卖出、删除）
+- 复用与 StockPortfolio 相同的 BuyDialog / SellDialog 逻辑
+
+**新增状态：**
+- `expandedCryptoId: string | null` — 当前展开的加密货币卡片 ID
+- `cryptoBuyDialogHolding: CryptoHolding | null`
+- `cryptoSellDialogHolding: CryptoHolding | null`
+
+**Dialog 复用策略：** 买入/卖出 Dialog 的表单逻辑对股票和加密货币完全一致（数量、单价、关联账户、预览计算）。可以将 Dialog 抽取为共享组件，通过 props 传入持仓数据和对应的 Supabase 表名/mutate 函数。也可以在两个组件中各自内联实现——逻辑相同但代码独立，避免过度抽象。实现时根据代码量决定。
 
 ### 买入/卖出 Dialog 共同特征
 
@@ -143,4 +167,3 @@
 - **不写交易历史**：不向 stock_transactions 表插入记录
 - **不做跨币种转换**：买卖操作不涉及汇率换算
 - **不做手续费**：虽然 StockTransaction 接口有 fees 字段，本次不引入
-- **不做加密货币**：本次仅覆盖股票/基金，加密货币的类似功能可后续复用此模式
