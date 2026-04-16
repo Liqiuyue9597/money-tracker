@@ -502,43 +502,45 @@ export function StockPortfolio() {
                   return (
                     <Card
                       key={h.id}
-                      className={`border-0 shadow-sm overflow-hidden transition-all ${
-                        expandedId === h.id ? "ring-1 ring-primary/20" : ""
+                      className={`shadow-sm overflow-hidden transition-all cursor-pointer ${
+                        expandedId === h.id ? "border-foreground" : "border-0"
                       }`}
+                      onClick={() => setExpandedId(expandedId === h.id ? null : h.id)}
                     >
                       <CardContent className="p-4">
-                        {/* Clickable card header */}
-                        <div
-                          className="flex items-start justify-between cursor-pointer"
-                          onClick={() => setExpandedId(expandedId === h.id ? null : h.id)}
-                        >
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm">{h.symbol}</span>
-                              <Badge variant="secondary" className="text-[10px] px-1.5">
-                                {h.currency}
+                        {/* Row 1: Symbol + badges + › arrow */}
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[15px]">{h.symbol}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5">
+                              {h.currency}
+                            </Badge>
+                            {isManual && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 text-amber-600 border-amber-300">
+                                手动
                               </Badge>
-                              {isManual && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 text-amber-600 border-amber-300">
-                                  手动
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              {quote?.name || h.name || h.symbol}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1 tabular-nums">
-                              {Number(h.quantity)} {isFund ? "份" : "股"} × {CURRENCIES[h.currency].symbol}{Number(h.buy_price).toFixed(isFund ? 4 : 2)}
-                            </div>
+                            )}
                           </div>
+                          <span className={`text-muted-foreground text-lg transition-transform ${expandedId === h.id ? "rotate-90" : ""}`}>
+                            ›
+                          </span>
+                        </div>
+
+                        {/* Row 2: Name */}
+                        <div className="text-[13px] text-muted-foreground">
+                          {quote?.name || h.name || h.symbol}
+                        </div>
+
+                        {/* Row 3: Quantity × Price (left) + Value & PnL (right) */}
+                        <div className="flex items-end justify-between mt-2">
+                          <span className="text-[13px] text-muted-foreground tabular-nums">
+                            {Number(h.quantity)} {isFund ? "份" : "股"} × {CURRENCIES[h.currency].symbol}{Number(h.buy_price).toFixed(isFund ? 4 : 2)}
+                          </span>
                           <div className="text-right">
                             {currentPrice > 0 ? (
                               <>
-                                <div className="font-bold tabular-nums text-sm">
+                                <div className="font-semibold text-sm tabular-nums">
                                   {formatMoney(convertedValue, mainCurrency)}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground tabular-nums">
-                                  单价 {CURRENCIES[h.currency].symbol}{currentPrice.toFixed(isFund ? 4 : 2)}
                                 </div>
                                 <div
                                   className={`text-xs font-semibold tabular-nums ${
@@ -557,9 +559,6 @@ export function StockPortfolio() {
                               </button>
                             )}
                           </div>
-                          <span className={`ml-2 text-muted-foreground transition-transform ${expandedId === h.id ? "rotate-90" : ""}`}>
-                            ›
-                          </span>
                         </div>
 
                         {/* Expanded action bar */}
@@ -567,32 +566,36 @@ export function StockPortfolio() {
                           <div className="border-t mt-3 pt-3 flex gap-2">
                             <Button
                               size="sm"
-                              className="flex-1 rounded-xl text-xs"
-                              onClick={() => setBuyHolding(h)}
+                              className="flex-1 rounded-lg text-[13px] py-2"
+                              onClick={(e) => { e.stopPropagation(); setBuyHolding(h); }}
                             >
                               📈 买入
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 rounded-xl text-xs"
-                              onClick={() => setSellHolding(h)}
+                              className="flex-1 rounded-lg text-[13px] py-2"
+                              onClick={(e) => { e.stopPropagation(); setSellHolding(h); }}
                             >
                               📉 卖出
                             </Button>
-                            <button
-                              onClick={() => openEditDialog(h.symbol, currentPrice)}
-                              className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-10 rounded-lg px-0"
+                              onClick={(e) => { e.stopPropagation(); openEditDialog(h.symbol, currentPrice); }}
                               title="手动更新价格"
                             >
                               <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(h.id)}
-                              className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-10 rounded-lg px-0"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(h.id); }}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </CardContent>

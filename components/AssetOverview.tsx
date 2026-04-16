@@ -457,7 +457,7 @@ export function AssetOverview() {
                             <div className="text-xs text-muted-foreground">加载中</div>
                           )}
                         </div>
-                        <span className={`text-muted-foreground transition-transform ${expandedCryptoId === h.id ? "rotate-90" : ""}`}>
+                        <span className={`text-muted-foreground text-lg transition-transform ${expandedCryptoId === h.id ? "rotate-90" : ""}`}>
                           ›
                         </span>
                       </div>
@@ -466,7 +466,7 @@ export function AssetOverview() {
                         <div className="border-t px-4 py-3 flex gap-2">
                           <Button
                             size="sm"
-                            className="flex-1 rounded-xl text-xs"
+                            className="flex-1 rounded-lg text-[13px] py-2"
                             onClick={() => setCryptoBuyHolding(h)}
                           >
                             📈 买入
@@ -474,17 +474,19 @@ export function AssetOverview() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 rounded-xl text-xs"
+                            className="flex-1 rounded-lg text-[13px] py-2"
                             onClick={() => setCryptoSellHolding(h)}
                           >
                             📉 卖出
                           </Button>
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-10 rounded-lg px-0"
                             onClick={() => handleDeleteCrypto(h.id)}
-                            className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       )}
                     </div>
