@@ -148,11 +148,13 @@ export function useStockQuotes(symbols: string[], userId?: string) {
   const fallbackData = useMemo<Record<string, StockQuote> | undefined>(() => {
     if (!cacheKey) return undefined;
     try {
+      if (typeof window === "undefined") return undefined;
       const raw = localStorage.getItem(cacheKey);
       return raw ? (JSON.parse(raw) as Record<string, StockQuote>) : undefined;
     } catch {
       return undefined;
     }
+  // cacheKey encodes all relevant dependencies (userId + sorted symbols)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
@@ -164,7 +166,7 @@ export function useStockQuotes(symbols: string[], userId?: string) {
       dedupingInterval: 60_000,
       fallbackData,
       onSuccess(data) {
-        if (!cacheKey) return;
+        if (!cacheKey || typeof window === "undefined") return;
         try {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         } catch {
