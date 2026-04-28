@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import useSWR, { type SWRConfiguration } from "swr";
 import { supabase, type Transaction, type StockHolding, type CryptoHolding, type UserSetting } from "@/lib/supabase";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
@@ -132,15 +133,45 @@ export function useStockHoldings(userId: string | undefined) {
   );
 }
 
-/** Stock quotes from API. Key depends on symbols so it re-fetches when holdings change. */
-export function useStockQuotes(symbols: string[]) {
+/** Stock quotes from API. Key depends on symbols so it re-fetches when holdings change.
+ *  Persists last-fetched quotes to localStorage (keyed by userId + symbols) so the
+ *  component can render stale-but-real data while the fresh fetch is in flight.
+ */
+export function useStockQuotes(symbols: string[], userId?: string) {
   const sorted = [...symbols].sort();
   const key = sorted.length > 0 ? ["stock_quotes", ...sorted] : null;
+
+  const cacheKey = userId && sorted.length > 0
+    ? `stock_quotes_cache:${userId}:${sorted.join(",")}`
+    : null;
+
+  const fallbackData = useMemo<Record<string, StockQuote> | undefined>(() => {
+    if (!cacheKey) return undefined;
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      return raw ? (JSON.parse(raw) as Record<string, StockQuote>) : undefined;
+    } catch {
+      return undefined;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey]);
 
   return useSWR<Record<string, StockQuote>>(
     key,
     async () => getStockQuotes(sorted),
-    { ...defaultConfig, dedupingInterval: 60_000 }, // quotes 1 min dedup
+    {
+      ...defaultConfig,
+      dedupingInterval: 60_000,
+      fallbackData,
+      onSuccess(data) {
+        if (!cacheKey) return;
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch {
+          // localStorage full or unavailable — fail silently
+        }
+      },
+    },
   );
 }
 
