@@ -37,7 +37,7 @@ export function AssetOverview() {
   const { data: usdRates } = useExchangeRates("USD");
   const { data: holdings, isLoading: holdingsLoading } = useStockHoldings(user?.id);
   const stockSymbols = useMemo(() => holdings ? [...new Set(holdings.map((h) => h.symbol))] : [], [holdings]);
-  const { data: quotes, isLoading: quotesLoading } = useStockQuotes(stockSymbols);
+  const { data: quotes, isLoading: quotesLoading } = useStockQuotes(stockSymbols, user?.id);
   const { data: cryptoHoldings, mutate: mutateCrypto, isLoading: cryptoLoading } = useCryptoHoldings(user?.id);
   const cryptoSymbols = useMemo(() => cryptoHoldings ? [...new Set(cryptoHoldings.map((c) => c.symbol))] : [], [cryptoHoldings]);
   const { data: cryptoPrices } = useCryptoPrices(cryptoSymbols);
