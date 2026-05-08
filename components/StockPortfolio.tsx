@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { BuyDialog } from "@/components/BuyDialog";
 import { SellDialog } from "@/components/SellDialog";
 import { executeBuy, executeSell } from "@/lib/trading";
+import { RealizedGainsList } from "@/components/RealizedGainsList";
 
 /** Get type label for display */
 function getTypeLabel(type: StockAssetType): string {
@@ -607,6 +608,9 @@ export function StockPortfolio() {
           );
         })
       )}
+
+      {/* Realized Gains */}
+      <RealizedGainsList />
 
       {/* Buy Dialog */}
       {buyHolding && (
