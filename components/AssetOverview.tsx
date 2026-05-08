@@ -434,14 +434,16 @@ export function AssetOverview() {
                       <div className="text-xs text-muted-foreground">加密资产总值</div>
                       <div className="text-lg font-bold tabular-nums">${totalCryptoValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                     </div>
-                    <div className={`text-xs font-semibold tabular-nums ${totalCryptoValue >= totalCryptoCost ? "text-emerald-600" : "text-red-600"}`}>
-                      {totalCryptoValue >= totalCryptoCost ? "+" : ""}{(totalCryptoValue - totalCryptoCost).toFixed(2)}
-                    </div>
-                    {cryptoRealizedPnl !== 0 && (
-                      <div className={`text-xs tabular-nums mt-0.5 ${cryptoRealizedPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                        已实现 {cryptoRealizedPnl >= 0 ? "+" : ""}{formatMoney(cryptoRealizedPnl, mainCurrency)}
+                    <div className="text-right">
+                      <div className={`text-xs font-semibold tabular-nums ${totalCryptoValue >= totalCryptoCost ? "text-emerald-600" : "text-red-600"}`}>
+                        {totalCryptoValue >= totalCryptoCost ? "+" : ""}{(totalCryptoValue - totalCryptoCost).toFixed(2)}
                       </div>
-                    )}
+                      {cryptoRealizedPnl !== 0 && (
+                        <div className={`text-xs tabular-nums mt-0.5 ${cryptoRealizedPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          已实现 {cryptoRealizedPnl >= 0 ? "+" : ""}{formatMoney(cryptoRealizedPnl, mainCurrency)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
