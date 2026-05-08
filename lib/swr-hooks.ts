@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import useSWR, { type SWRConfiguration } from "swr";
-import { supabase, type Transaction, type StockHolding, type CryptoHolding, type UserSetting } from "@/lib/supabase";
+import { supabase, type Transaction, type StockHolding, type CryptoHolding, type UserSetting, type RealizedGain } from "@/lib/supabase";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
 import { getCryptoPrices, type CryptoPrice } from "@/lib/crypto";
 import { getExchangeRates, type ExchangeRates } from "@/lib/exchange";
@@ -246,4 +246,21 @@ export function useUserSettings(userId: string | undefined) {
   };
 
   return { settings: data ?? {}, updateSetting, mutate, ...rest };
+}
+
+/** Realized gains — all closed positions, newest first */
+export function useRealizedGains(userId: string | undefined) {
+  return useSWR<RealizedGain[]>(
+    userId ? ["realized_gains", userId] : null,
+    async () => {
+      const { data, error } = await supabase
+        .from("realized_gains")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("closed_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    defaultConfig,
+  );
 }

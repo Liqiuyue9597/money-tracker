@@ -174,3 +174,33 @@ export function formatMoney(amount: number, currency: Currency): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+export interface RealizedGain {
+  id: string;
+  user_id: string;
+  symbol: string;
+  name: string;
+  asset_type: "us" | "hk" | "fund" | "crypto";
+  currency: Currency;
+  cost_basis: number;
+  proceeds: number;
+  realized_pnl: number;
+  realized_pnl_pct: number;
+  closed_at: string;
+  created_at: string;
+}
+
+export interface RealizedGain {
+  id: string;
+  user_id: string;
+  symbol: string;
+  name: string;
+  asset_type: "us" | "hk" | "fund" | "crypto";
+  currency: Currency;
+  cost_basis: number;
+  proceeds: number;
+  realized_pnl: number;
+  realized_pnl_pct: number;
+  closed_at: string;
+  created_at: string;
+}
