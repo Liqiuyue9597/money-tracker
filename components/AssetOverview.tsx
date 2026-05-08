@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { supabase, type Account, type Currency, type CryptoHolding, CURRENCIES, formatMoney } from "@/lib/supabase";
-import { useStockHoldings, useStockQuotes, useCryptoHoldings, useCryptoPrices, useExchangeRates } from "@/lib/swr-hooks";
+import { useStockHoldings, useStockQuotes, useCryptoHoldings, useCryptoPrices, useExchangeRates, useRealizedGains } from "@/lib/swr-hooks";
 import { convertCurrency } from "@/lib/exchange";
 import { CRYPTO_SYMBOLS } from "@/lib/crypto";
 import { getEffectivePriceForHolding } from "@/lib/stocks";
@@ -41,6 +41,7 @@ export function AssetOverview() {
   const { data: cryptoHoldings, mutate: mutateCrypto, isLoading: cryptoLoading } = useCryptoHoldings(user?.id);
   const cryptoSymbols = useMemo(() => cryptoHoldings ? [...new Set(cryptoHoldings.map((c) => c.symbol))] : [], [cryptoHoldings]);
   const { data: cryptoPrices } = useCryptoPrices(cryptoSymbols);
+  const { data: realizedGains = [] } = useRealizedGains(user?.id);
 
   // UI state
   const [managerOpen, setManagerOpen] = useState(false);
@@ -127,6 +128,25 @@ export function AssetOverview() {
       : 0;
     return { cashTotal: cash, debtTotal: debt, excludedTotal: excluded, cryptoValueInMain: cryptoMain };
   }, [accounts, mainCurrency, rateMap, totalCryptoValue]);
+
+  // Realized PnL totals (converted to mainCurrency)
+  const stockRealizedPnl = useMemo(() => {
+    return realizedGains
+      .filter((g) => g.asset_type !== "crypto")
+      .reduce(
+        (sum, g) => sum + convertCurrency(g.realized_pnl, g.currency as Currency, mainCurrency, rateMap),
+        0
+      );
+  }, [realizedGains, mainCurrency, rateMap]);
+
+  const cryptoRealizedPnl = useMemo(() => {
+    return realizedGains
+      .filter((g) => g.asset_type === "crypto")
+      .reduce(
+        (sum, g) => sum + convertCurrency(g.realized_pnl, g.currency as Currency, mainCurrency, rateMap),
+        0
+      );
+  }, [realizedGains, mainCurrency, rateMap]);
 
   async function handleAddCrypto() {
     if (!user || !cryptoQty || !cryptoBuyPrice) { toast.error("请填写完整"); return; }
@@ -352,6 +372,11 @@ export function AssetOverview() {
                         <div className={`text-[10px] font-medium tabular-nums ${stockPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                           {stockPnl >= 0 ? "+" : ""}{formatMoney(stockPnl, mainCurrency)} ({stockPnl >= 0 ? "+" : ""}{stockPnlPct.toFixed(1)}%)
                         </div>
+                        {stockRealizedPnl !== 0 && (
+                          <div className={`text-[10px] tabular-nums mt-0.5 ${stockRealizedPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                            已实现 {stockRealizedPnl >= 0 ? "+" : ""}{formatMoney(stockRealizedPnl, mainCurrency)}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -412,6 +437,11 @@ export function AssetOverview() {
                     <div className={`text-xs font-semibold tabular-nums ${totalCryptoValue >= totalCryptoCost ? "text-emerald-600" : "text-red-600"}`}>
                       {totalCryptoValue >= totalCryptoCost ? "+" : ""}{(totalCryptoValue - totalCryptoCost).toFixed(2)}
                     </div>
+                    {cryptoRealizedPnl !== 0 && (
+                      <div className={`text-xs tabular-nums mt-0.5 ${cryptoRealizedPnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        已实现 {cryptoRealizedPnl >= 0 ? "+" : ""}{formatMoney(cryptoRealizedPnl, mainCurrency)}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
