@@ -21,15 +21,17 @@ export function RealizedGainsList() {
   const { user, mainCurrency } = useApp();
   const { data: gains = [], isLoading, error } = useRealizedGains(user?.id);
   const { data: rates } = useExchangeRates(mainCurrency);
-  const rateMap = rates?.rates ?? { CNY: 1, USD: 0.137, HKD: 1.07 };
+  const rateMap = rates?.rates;
 
   const totalPnl = useMemo(
     () =>
-      gains.reduce(
-        (sum, g) =>
-          sum + convertCurrency(g.realized_pnl, g.currency as Currency, mainCurrency, rateMap),
-        0
-      ),
+      rateMap
+        ? gains.reduce(
+            (sum, g) =>
+              sum + convertCurrency(g.realized_pnl, g.currency as Currency, mainCurrency, rateMap),
+            0
+          )
+        : null,
     [gains, mainCurrency, rateMap]
   );
 
@@ -63,11 +65,12 @@ export function RealizedGainsList() {
           </div>
           <div
             className={`text-lg font-bold tabular-nums ${
-              totalPnl >= 0 ? "text-emerald-600" : "text-red-600"
+              totalPnl === null ? "text-muted-foreground" : totalPnl >= 0 ? "text-emerald-600" : "text-red-600"
             }`}
           >
-            {totalPnl >= 0 ? "+" : ""}
-            {formatMoney(totalPnl, mainCurrency)}
+            {totalPnl === null
+              ? "—"
+              : `${totalPnl >= 0 ? "+" : ""}${formatMoney(totalPnl, mainCurrency)}`}
           </div>
         </CardContent>
       </Card>
@@ -96,7 +99,7 @@ export function RealizedGainsList() {
                         isPositive ? "text-emerald-600" : "text-red-600"
                       }`}
                     >
-                      {isPositive ? "+" : ""}
+                      {isPositive ? "+" : "−"}
                       {currSymbol}
                       {Math.abs(g.realized_pnl).toFixed(2)}
                     </div>
@@ -115,7 +118,7 @@ export function RealizedGainsList() {
                   <span>·</span>
                   <span>收入 {currSymbol}{Number(g.proceeds).toFixed(2)}</span>
                   <span>·</span>
-                  <span>{g.closed_at}</span>
+                  <span>{g.closed_at.slice(0, 10)}</span>
                 </div>
               </CardContent>
             </Card>
