@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
+const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL ?? "";
+const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? "";
+
 export function AuthForm() {
   const { signIn, signUp } = useApp();
   const [email, setEmail] = useState("");
@@ -45,6 +49,18 @@ export function AuthForm() {
       },
     });
     if (error) setError(error.message);
+  }
+
+  async function handleDemoLogin() {
+    setError("");
+    setLoading(true);
+    try {
+      await signIn(demoEmail, demoPassword);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Demo 登录失败");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -130,6 +146,26 @@ export function AuthForm() {
               </span>
             </button>
           </form>
+
+          {/* Demo Login — local dev only */}
+          {isDemoMode && (
+            <>
+              <div className="flex items-center gap-3 my-4">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">仅开发环境</span>
+                <Separator className="flex-1" />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleDemoLogin}
+                disabled={loading}
+                className="w-full h-12 rounded-xl text-base"
+              >
+                🎭 体验 Demo
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
