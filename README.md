@@ -2,8 +2,7 @@
 
 个人记账 PWA 应用，支持多账户、多币种、股票和加密货币追踪。无广告，通过 iOS 快捷指令可实现快捷记账。
 
-- **线上地址**: https://money-tracker-pied-one.vercel.app
-- **技术栈**: Next.js 16 + TypeScript + Tailwind CSS v4 + shadcn/ui + Supabase
+
 
 ## 功能
 
