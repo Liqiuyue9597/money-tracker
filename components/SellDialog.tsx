@@ -17,7 +17,6 @@ interface SellDialogProps {
   currentBuyPrice: number;
   holdingCurrency: Currency;
   unitLabel: string;
-  /** Called on confirm. Should return a promise that resolves on success. */
   onConfirm: (data: { quantity: number; price: number; accountId: string; isClearAll: boolean }) => Promise<void>;
 }
 
@@ -32,10 +31,13 @@ export function SellDialog({
   onConfirm,
 }: SellDialogProps) {
   const { accounts } = useApp();
-  const [quantity, setQuantity] = useState("");
+
+  const [amountOrQty, setAmountOrQty] = useState("");
   const [price, setPrice] = useState("");
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const isFund = unitLabel === "份";
 
   const sortedAccounts = useMemo(() => {
     const cash = accounts.filter((a) => a.type === "cash");
@@ -49,17 +51,34 @@ export function SellDialog({
   const selectedAccount = sortedAccounts.find((a) => a.id === accountId);
   const currencyMismatch = selectedAccount && selectedAccount.currency !== holdingCurrency;
 
-  const qty = parseFloat(quantity);
+  const inputAmount = parseFloat(amountOrQty);
   const prc = parseFloat(price);
-  const isValid = qty > 0 && qty <= currentQuantity && prc > 0 && accountId !== "";
-  const isClearAll = Math.abs(qty - currentQuantity) < 1e-9;
 
-  // Preview
-  const remainingQuantity = isValid ? currentQuantity - qty : null;
-  const receiveAmount = isValid ? qty * prc : null;
-  const newBalance = isValid && selectedAccount
-    ? Number(selectedAccount.balance) + (receiveAmount ?? 0)
-    : null;
+  const sellQty = isFund
+    ? (inputAmount > 0 && prc > 0 ? inputAmount / prc : NaN)
+    : inputAmount;
+
+  const exceedsHolding = isFund
+    ? (!isNaN(sellQty) && sellQty > currentQuantity + 1e-9)
+    : (!isNaN(inputAmount) && inputAmount > currentQuantity + 1e-9);
+
+  const isValid =
+    !isNaN(inputAmount) && inputAmount > 0 &&
+    !isNaN(prc) && prc > 0 &&
+    accountId !== "" &&
+    !isNaN(sellQty) && sellQty > 0 &&
+    !exceedsHolding;
+
+  const isClearAll = isValid && Math.abs(sellQty - currentQuantity) < 1e-4;
+
+  const remainingQuantity = isValid ? currentQuantity - sellQty : null;
+  const receiveAmount = isFund
+    ? (isValid ? inputAmount : null)
+    : (isValid ? inputAmount * prc : null);
+  const newBalance =
+    receiveAmount != null && selectedAccount
+      ? Number(selectedAccount.balance) + receiveAmount
+      : null;
 
   async function handleConfirm() {
     if (!isValid) {
@@ -68,13 +87,15 @@ export function SellDialog({
     }
     setLoading(true);
     try {
-      await onConfirm({ quantity: qty, price: prc, accountId, isClearAll });
-      setQuantity("");
+      const roundedQty = isFund ? parseFloat(sellQty.toFixed(4)) : sellQty;
+      await onConfirm({ quantity: roundedQty, price: prc, accountId, isClearAll });
+      setAmountOrQty("");
       setPrice("");
       setAccountId("");
       onOpenChange(false);
-    } catch {
-      // onConfirm should handle its own toast.error
+    } catch (err) {
+      console.error("SellDialog: onConfirm failed", err);
+      toast.error("操作失败，请重试");
     } finally {
       setLoading(false);
     }
@@ -82,7 +103,7 @@ export function SellDialog({
 
   function handleOpenChange(newOpen: boolean) {
     if (!newOpen) {
-      setQuantity("");
+      setAmountOrQty("");
       setPrice("");
       setAccountId("");
     }
@@ -90,7 +111,12 @@ export function SellDialog({
   }
 
   function handleSellAll() {
-    setQuantity(currentQuantity.toString());
+    if (isFund) {
+      const navForCalc = prc > 0 ? prc : currentBuyPrice;
+      setAmountOrQty((currentQuantity * navForCalc).toFixed(2));
+    } else {
+      setAmountOrQty(currentQuantity.toString());
+    }
   }
 
   return (
@@ -100,23 +126,31 @@ export function SellDialog({
           <DialogTitle>卖出 {symbol}</DialogTitle>
         </DialogHeader>
         <div className="text-xs text-muted-foreground -mt-2">
-          当前持仓：{currentQuantity}{unitLabel} · 成本 {CURRENCIES[holdingCurrency].symbol}{currentBuyPrice.toFixed(2)}
+          当前持仓：{currentQuantity}{unitLabel} · 成本 {CURRENCIES[holdingCurrency].symbol}{currentBuyPrice.toFixed(isFund ? 4 : 2)}
         </div>
         <div className="space-y-3">
-          {/* Quantity */}
+
+          {/* Input 1: 卖出金额 (fund) or 卖出数量 (stock) */}
           <div>
-            <div className="text-xs text-muted-foreground mb-1">卖出数量</div>
+            <div className="text-xs text-muted-foreground mb-1">
+              {isFund ? "卖出金额" : "卖出数量"}
+            </div>
             <Input
               type="number"
-              placeholder={`数量（${unitLabel}）`}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              step="0.01"
+              placeholder={isFund ? `金额（${CURRENCIES[holdingCurrency].symbol}）` : `数量（${unitLabel}）`}
+              value={amountOrQty}
+              onChange={(e) => setAmountOrQty(e.target.value)}
+              step={isFund ? "1" : "0.01"}
               className="rounded-xl"
               autoFocus
             />
             <div className="flex justify-between mt-1">
-              <span className="text-xs text-muted-foreground">可卖：{currentQuantity}{unitLabel}</span>
+              <span className="text-xs text-muted-foreground">
+                持仓：{currentQuantity.toFixed(isFund ? 4 : 2)}{unitLabel}
+                {isFund && !isNaN(sellQty) && sellQty > 0 && (
+                  <span className="ml-1 text-foreground">（≈ {sellQty.toFixed(4)} 份）</span>
+                )}
+              </span>
               <button
                 onClick={handleSellAll}
                 className="text-xs text-primary underline"
@@ -126,12 +160,14 @@ export function SellDialog({
             </div>
           </div>
 
-          {/* Price */}
+          {/* Input 2: 净值 (fund) or 单价 (stock) */}
           <div>
-            <div className="text-xs text-muted-foreground mb-1">卖出单价</div>
+            <div className="text-xs text-muted-foreground mb-1">
+              {isFund ? "卖出净值" : "卖出单价"}
+            </div>
             <Input
               type="number"
-              placeholder={`单价（${CURRENCIES[holdingCurrency].symbol}）`}
+              placeholder={`${isFund ? "净值" : "单价"}（${CURRENCIES[holdingCurrency].symbol}）`}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               step="0.0001"
@@ -156,24 +192,41 @@ export function SellDialog({
             </select>
           </div>
 
-          {/* Currency mismatch warning */}
           {currencyMismatch && (
             <div className="rounded-xl bg-red-50 border border-red-300 p-2 text-xs text-red-800">
               ⚠️ 币种不匹配：持仓为 {CURRENCIES[holdingCurrency].name}（{holdingCurrency}），账户为 {CURRENCIES[selectedAccount.currency].name}（{selectedAccount.currency}）。收款金额将以 {holdingCurrency} 计算直接入账，不做汇率转换。
             </div>
           )}
+
+          {exceedsHolding && (
+            <div className="rounded-xl bg-red-50 border border-red-300 p-2 text-xs text-red-800">
+              ⚠️ {isFund ? `卖出金额对应份额（${isNaN(sellQty) ? "—" : sellQty.toFixed(4)} 份）超过当前持仓` : "卖出数量超过当前持仓"}
+            </div>
+          )}
+
           {isValid && receiveAmount != null && (
             <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs space-y-1">
               <div className="text-muted-foreground mb-1">卖出后预览</div>
+              {isFund && (
+                <div className="flex justify-between">
+                  <span>卖出份额</span>
+                  <span className="font-medium">
+                    ≈ <strong>{sellQty.toFixed(4)} 份</strong>
+                    <span className="text-muted-foreground ml-1">({inputAmount} ÷ {prc})</span>
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>剩余数量</span>
                 <span className="font-medium">
-                  {currentQuantity} - {qty} = <strong>{remainingQuantity}{unitLabel}</strong>
+                  {currentQuantity.toFixed(isFund ? 4 : 2)} - {sellQty.toFixed(isFund ? 4 : 2)} = <strong>{remainingQuantity!.toFixed(isFund ? 4 : 2)}{unitLabel}</strong>
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>成本价</span>
-                <span className="font-medium"><strong>{CURRENCIES[holdingCurrency].symbol}{currentBuyPrice.toFixed(2)}</strong>（不变）</span>
+                <span className="font-medium">
+                  <strong>{CURRENCIES[holdingCurrency].symbol}{currentBuyPrice.toFixed(isFund ? 4 : 2)}</strong>（不变）
+                </span>
               </div>
               <div className="border-t border-dashed border-red-300 my-1" />
               <div className="flex justify-between">
@@ -189,7 +242,6 @@ export function SellDialog({
             </div>
           )}
 
-          {/* Clear all warning */}
           {isValid && isClearAll && (
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
               ⚠️ 全部卖出后将自动删除该持仓记录，收款到选定账户
