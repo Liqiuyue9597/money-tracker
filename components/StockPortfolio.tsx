@@ -68,6 +68,18 @@ export function StockPortfolio() {
   // Expandable card state
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Collapsible group state (collapsed types)
+  const [collapsedTypes, setCollapsedTypes] = useState<Set<StockAssetType>>(new Set());
+
+  function toggleGroupCollapse(type: StockAssetType) {
+    setCollapsedTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
   // Buy/Sell dialog state
   const [buyHolding, setBuyHolding] = useState<StockHolding | null>(null);
   const [sellHolding, setSellHolding] = useState<StockHolding | null>(null);
@@ -465,26 +477,35 @@ export function StockPortfolio() {
 
           return (
             <div key={type} className="mb-4">
-              {/* Type Header */}
-              <div className="flex items-center justify-between mb-2 px-1">
+              {/* Type Header — click to collapse/expand */}
+              <div
+                className="flex items-center justify-between mb-2 px-1 cursor-pointer select-none"
+                onClick={() => toggleGroupCollapse(type)}
+              >
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-sm">{getTypeLabel(type)}</span>
                   <Badge variant="secondary" className="text-xs">
                     {items.length}
                   </Badge>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold tabular-nums">
-                    {formatMoney(totals.value, mainCurrency)}
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <div className="text-sm font-semibold tabular-nums">
+                      {formatMoney(totals.value, mainCurrency)}
+                    </div>
+                    <div className={`text-[10px] font-semibold tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {pnl >= 0 ? "+" : ""}{formatMoney(pnl, mainCurrency)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
+                    </div>
                   </div>
-                  <div className={`text-[10px] font-semibold tabular-nums ${pnl >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {pnl >= 0 ? "+" : ""}{formatMoney(pnl, mainCurrency)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)
-                  </div>
+                  <span className={`text-muted-foreground text-base transition-transform duration-200 ${collapsedTypes.has(type) ? "rotate-180" : ""}`}>
+                    ∧
+                  </span>
                 </div>
               </div>
 
               {/* Holdings for this type */}
-              <div className="space-y-2">
+              {!collapsedTypes.has(type) && (
+                <div className="space-y-2">
                 {items.map((h) => {
                   const quote = quotes[h.symbol];
                   const currentPrice = getEffectivePrice(h.symbol);
@@ -604,6 +625,7 @@ export function StockPortfolio() {
                   );
                 })}
               </div>
+              )}
             </div>
           );
         })
