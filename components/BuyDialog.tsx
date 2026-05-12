@@ -94,13 +94,15 @@ export function BuyDialog({
     setLoading(true);
     try {
       // Always pass quantity (shares) and price (nav/unit price) downstream
-      await onConfirm({ quantity: parseFloat(buyQty.toFixed(4)), price: prc, accountId });
+      const roundedQty = isFund ? parseFloat(buyQty.toFixed(4)) : buyQty;
+      await onConfirm({ quantity: roundedQty, price: prc, accountId });
       setAmountOrQty("");
       setPrice("");
       setAccountId("");
       onOpenChange(false);
-    } catch {
-      // onConfirm handles its own toast.error
+    } catch (err) {
+      console.error("BuyDialog: onConfirm failed", err);
+      toast.error("操作失败，请重试");
     } finally {
       setLoading(false);
     }
