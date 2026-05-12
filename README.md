@@ -2,7 +2,23 @@
 
 个人记账 PWA 应用，支持多账户、多币种、股票和加密货币追踪。无广告，通过 iOS 快捷指令可实现快捷记账。
 
-
+<table>
+  <tr>
+    <td align="center"><b>首页</b></td>
+    <td align="center"><b>资产页</b></td>
+    <td align="center"><b>股票页</b></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>账户与账单概览</sub></td>
+    <td align="center"><sub>配置有桑基图</sub></td>
+    <td align="center"><sub>按股票代号自行添加</sub></td>
+  </tr>
+  <tr>
+    <td><img width="280" alt="首页" src="https://github.com/user-attachments/assets/0c7489b4-1d19-4800-8eda-1771f53bfcea" /></td>
+    <td><img width="280" alt="资产页" src="https://github.com/user-attachments/assets/c2a15526-7474-4add-86ea-1cabc311bde3" /></td>
+    <td><img width="280" alt="股票页" src="https://github.com/user-attachments/assets/27d5312d-679e-4490-98a8-32e048cec382" /></td>
+  </tr>
+</table>
 
 ## 功能
 
