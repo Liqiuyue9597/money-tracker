@@ -36,6 +36,7 @@ export function SellDialog({
   const [price, setPrice] = useState("");
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSellAll, setIsSellAll] = useState(false);
 
   const isFund = unitLabel === "份";
 
@@ -69,7 +70,7 @@ export function SellDialog({
     !isNaN(sellQty) && sellQty > 0 &&
     !exceedsHolding;
 
-  const isClearAll = isValid && Math.abs(sellQty - currentQuantity) < 1e-4;
+  const isClearAll = isValid && isSellAll;
 
   const remainingQuantity = isValid ? currentQuantity - sellQty : null;
   const receiveAmount = isFund
@@ -94,6 +95,7 @@ export function SellDialog({
       setAmountOrQty("");
       setPrice("");
       setAccountId("");
+      setIsSellAll(false);
       onOpenChange(false);
     } catch (err) {
       console.error("SellDialog: onConfirm failed", err);
@@ -108,6 +110,7 @@ export function SellDialog({
       setAmountOrQty("");
       setPrice("");
       setAccountId("");
+      setIsSellAll(false);
     }
     onOpenChange(newOpen);
   }
@@ -116,12 +119,14 @@ export function SellDialog({
     if (isFund) {
       if (prc > 0) {
         setAmountOrQty((currentQuantity * prc).toFixed(2));
+        setIsSellAll(true);
       } else {
         // NAV not entered yet — show a toast hint
         toast.info("请先填写卖出净值，再点击「全部卖出」");
       }
     } else {
       setAmountOrQty(currentQuantity.toString());
+      setIsSellAll(true);
     }
   }
 
@@ -145,7 +150,7 @@ export function SellDialog({
               type="number"
               placeholder={isFund ? `金额（${CURRENCIES[holdingCurrency].symbol}）` : `数量（${unitLabel}）`}
               value={amountOrQty}
-              onChange={(e) => setAmountOrQty(e.target.value)}
+              onChange={(e) => { setAmountOrQty(e.target.value); setIsSellAll(false); }}
               step={isFund ? "1" : "0.01"}
               className="rounded-xl"
               autoFocus
