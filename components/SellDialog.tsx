@@ -87,7 +87,9 @@ export function SellDialog({
     }
     setLoading(true);
     try {
-      const roundedQty = isFund ? parseFloat(sellQty.toFixed(4)) : sellQty;
+      const roundedQty = isClearAll
+        ? currentQuantity
+        : isFund ? parseFloat(sellQty.toFixed(4)) : sellQty;
       await onConfirm({ quantity: roundedQty, price: prc, accountId, isClearAll });
       setAmountOrQty("");
       setPrice("");
@@ -95,7 +97,7 @@ export function SellDialog({
       onOpenChange(false);
     } catch (err) {
       console.error("SellDialog: onConfirm failed", err);
-      toast.error("操作失败，请重试");
+      // toast is handled by the caller
     } finally {
       setLoading(false);
     }
@@ -112,8 +114,12 @@ export function SellDialog({
 
   function handleSellAll() {
     if (isFund) {
-      const navForCalc = prc > 0 ? prc : currentBuyPrice;
-      setAmountOrQty((currentQuantity * navForCalc).toFixed(2));
+      if (prc > 0) {
+        setAmountOrQty((currentQuantity * prc).toFixed(2));
+      } else {
+        // NAV not entered yet — show a toast hint
+        toast.info("请先填写卖出净值，再点击「全部卖出」");
+      }
     } else {
       setAmountOrQty(currentQuantity.toString());
     }
