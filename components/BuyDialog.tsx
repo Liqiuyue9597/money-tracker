@@ -37,10 +37,15 @@ export function BuyDialog({
   onConfirm,
 }: BuyDialogProps) {
   const { accounts } = useApp();
-  const [quantity, setQuantity] = useState("");
+
+  // For funds: "amount" = 投入金额, "price" = 净值
+  // For stocks/crypto: "quantity" = 数量, "price" = 单价
+  const [amountOrQty, setAmountOrQty] = useState("");
   const [price, setPrice] = useState("");
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const isFund = unitLabel === "份";
 
   // Sort accounts: same currency first
   const sortedAccounts = useMemo(() => {
@@ -55,19 +60,31 @@ export function BuyDialog({
   const selectedAccount = sortedAccounts.find((a) => a.id === accountId);
   const currencyMismatch = selectedAccount && selectedAccount.currency !== holdingCurrency;
 
-  const qty = parseFloat(quantity);
-  const prc = parseFloat(price);
-  const isValid = qty > 0 && prc > 0 && accountId !== "";
+  const inputAmount = parseFloat(amountOrQty); // 投入金额 (fund) 或 数量 (stock)
+  const prc = parseFloat(price);               // 净值 (fund) 或 单价 (stock)
 
-  // Preview calculations
-  const newQuantity = isValid ? currentQuantity + qty : null;
+  // Derived values
+  const buyQty = isFund
+    ? (inputAmount > 0 && prc > 0 ? inputAmount / prc : NaN)
+    : inputAmount; // for stocks, amountOrQty IS the quantity
+
+  const isValid =
+    !isNaN(inputAmount) && inputAmount > 0 &&
+    !isNaN(prc) && prc > 0 &&
+    accountId !== "" &&
+    !isNaN(buyQty) && buyQty > 0;
+
+  const newQuantity = isValid ? currentQuantity + buyQty : null;
   const newAvgCost = isValid && newQuantity
-    ? (currentQuantity * currentBuyPrice + qty * prc) / newQuantity
+    ? (currentQuantity * currentBuyPrice + buyQty * prc) / newQuantity
     : null;
-  const deductAmount = isValid ? qty * prc : null;
-  const remainingBalance = isValid && selectedAccount
-    ? Number(selectedAccount.balance) - (deductAmount ?? 0)
-    : null;
+  const deductAmount = isFund
+    ? (isValid ? inputAmount : null)          // fund: deduct = 投入金额
+    : (isValid ? inputAmount * prc : null);   // stock: deduct = qty × price
+  const remainingBalance =
+    deductAmount != null && selectedAccount
+      ? Number(selectedAccount.balance) - deductAmount
+      : null;
 
   async function handleConfirm() {
     if (!isValid) {
@@ -76,23 +93,22 @@ export function BuyDialog({
     }
     setLoading(true);
     try {
-      await onConfirm({ quantity: qty, price: prc, accountId });
-      // Reset form on success
-      setQuantity("");
+      // Always pass quantity (shares) and price (nav/unit price) downstream
+      await onConfirm({ quantity: parseFloat(buyQty.toFixed(4)), price: prc, accountId });
+      setAmountOrQty("");
       setPrice("");
       setAccountId("");
       onOpenChange(false);
     } catch {
-      // onConfirm should handle its own toast.error
+      // onConfirm handles its own toast.error
     } finally {
       setLoading(false);
     }
   }
 
-  // Reset form when dialog opens
   function handleOpenChange(newOpen: boolean) {
     if (!newOpen) {
-      setQuantity("");
+      setAmountOrQty("");
       setPrice("");
       setAccountId("");
     }
@@ -106,29 +122,34 @@ export function BuyDialog({
           <DialogTitle>买入 {symbol}</DialogTitle>
         </DialogHeader>
         <div className="text-xs text-muted-foreground -mt-2">
-          当前持仓：{currentQuantity}{unitLabel} · 成本 {CURRENCIES[holdingCurrency].symbol}{currentBuyPrice.toFixed(2)}
+          当前持仓：{currentQuantity}{unitLabel} · 成本 {CURRENCIES[holdingCurrency].symbol}{currentBuyPrice.toFixed(isFund ? 4 : 2)}
         </div>
         <div className="space-y-3">
-          {/* Quantity */}
+
+          {/* Input 1: 投入金额 (fund) or 数量 (stock) */}
           <div>
-            <div className="text-xs text-muted-foreground mb-1">买入数量</div>
+            <div className="text-xs text-muted-foreground mb-1">
+              {isFund ? "投入金额" : "买入数量"}
+            </div>
             <Input
               type="number"
-              placeholder={`数量（${unitLabel}）`}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              step="0.01"
+              placeholder={isFund ? `金额（${CURRENCIES[holdingCurrency].symbol}）` : `数量（${unitLabel}）`}
+              value={amountOrQty}
+              onChange={(e) => setAmountOrQty(e.target.value)}
+              step={isFund ? "1" : "0.01"}
               className="rounded-xl"
               autoFocus
             />
           </div>
 
-          {/* Price */}
+          {/* Input 2: 净值 (fund) or 单价 (stock) */}
           <div>
-            <div className="text-xs text-muted-foreground mb-1">买入单价</div>
+            <div className="text-xs text-muted-foreground mb-1">
+              {isFund ? "买入净值" : "买入单价"}
+            </div>
             <Input
               type="number"
-              placeholder={`单价（${CURRENCIES[holdingCurrency].symbol}）`}
+              placeholder={`${isFund ? "净值" : "单价"}（${CURRENCIES[holdingCurrency].symbol}）`}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               step="0.0001"
@@ -164,13 +185,26 @@ export function BuyDialog({
           {isValid && newQuantity != null && newAvgCost != null && deductAmount != null && (
             <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs space-y-1">
               <div className="text-muted-foreground mb-1">买入后预览</div>
+              {isFund && (
+                <div className="flex justify-between">
+                  <span>获得份额</span>
+                  <span className="font-medium">
+                    ≈ <strong>{buyQty.toFixed(4)} 份</strong>
+                    <span className="text-muted-foreground ml-1">({inputAmount} ÷ {prc})</span>
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span>总数量</span>
-                <span className="font-medium">{currentQuantity} + {qty} = <strong>{newQuantity}{unitLabel}</strong></span>
+                <span>总{unitLabel}数</span>
+                <span className="font-medium">
+                  {currentQuantity.toFixed(isFund ? 4 : 2)} + {buyQty.toFixed(isFund ? 4 : 2)} = <strong>{newQuantity.toFixed(isFund ? 4 : 2)}{unitLabel}</strong>
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>加权平均成本</span>
-                <span className="font-medium"><strong>{CURRENCIES[holdingCurrency].symbol}{newAvgCost.toFixed(2)}</strong></span>
+                <span className="font-medium">
+                  <strong>{CURRENCIES[holdingCurrency].symbol}{newAvgCost.toFixed(isFund ? 4 : 2)}</strong>
+                </span>
               </div>
               <div className="border-t border-dashed border-emerald-300 my-1" />
               <div className="flex justify-between">
@@ -183,7 +217,6 @@ export function BuyDialog({
                   <span className="font-medium">{formatMoney(remainingBalance, selectedAccount.currency)}</span>
                 </div>
               )}
-              <div className="text-muted-foreground mt-1">💡 确认后可手动修改成本价</div>
             </div>
           )}
 
