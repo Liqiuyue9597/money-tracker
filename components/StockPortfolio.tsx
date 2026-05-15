@@ -187,7 +187,7 @@ export function StockPortfolio() {
     }
   }
 
-  async function handleBuy(holdingId: string, data: { quantity: number; price: number; accountId: string }) {
+  async function handleBuy(holdingId: string, data: { quantity: number; price: number; accountId: string; deductAmountOverride?: number }) {
     const holding = holdings.find((h) => h.id === holdingId);
     if (!holding) return;
 
@@ -200,6 +200,7 @@ export function StockPortfolio() {
         buyQty: data.quantity,
         buyPrice: data.price,
         accountId: data.accountId,
+        deductAmountOverride: data.deductAmountOverride,
       });
 
       toast.success(`已买入 ${data.quantity} ${holding.symbol}`);
