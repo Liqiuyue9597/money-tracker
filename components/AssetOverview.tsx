@@ -186,7 +186,7 @@ export function AssetOverview() {
     toast.success("已删除");
   }
 
-  async function handleBuyCrypto(holdingId: string, data: { quantity: number; price: number; accountId: string }) {
+  async function handleBuyCrypto(holdingId: string, data: { quantity: number; price: number; accountId: string; deductAmountOverride?: number }) {
     const holding = (cryptoHoldings ?? []).find((h) => h.id === holdingId);
     if (!holding) return;
 
@@ -199,6 +199,7 @@ export function AssetOverview() {
         buyQty: data.quantity,
         buyPrice: data.price,
         accountId: data.accountId,
+        deductAmountOverride: data.deductAmountOverride,
       });
 
       toast.success(`已买入 ${data.quantity} ${holding.symbol}`);

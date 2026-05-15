@@ -81,9 +81,10 @@ export function BuyDialog({
     : null;
   const deductAmount = (() => {
     if (!isValid) return null;
-    const parsedActualDeduct = parseFloat(actualDeductInput);
-    if (currencyMismatch && !isNaN(parsedActualDeduct) && parsedActualDeduct > 0) {
-      return parsedActualDeduct;
+    if (currencyMismatch) {
+      const parsedActualDeduct = parseFloat(actualDeductInput);
+      if (!isNaN(parsedActualDeduct) && parsedActualDeduct > 0) return parsedActualDeduct;
+      return null; // suppress preview until user fills in the HKD amount
     }
     return isFund ? inputAmount : inputAmount * prc;
   })();
@@ -97,9 +98,12 @@ export function BuyDialog({
       toast.error("请填写完整信息");
       return;
     }
-    if (currencyMismatch && actualDeductInput === "") {
-      toast.error("请填写实际扣款金额");
-      return;
+    if (currencyMismatch) {
+      const parsedForValidation = parseFloat(actualDeductInput);
+      if (!actualDeductInput.trim() || isNaN(parsedForValidation) || parsedForValidation <= 0) {
+        toast.error("请填写有效的实际扣款金额");
+        return;
+      }
     }
     setLoading(true);
     try {
