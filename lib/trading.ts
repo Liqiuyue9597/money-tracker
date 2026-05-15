@@ -9,11 +9,12 @@ export async function executeBuy(params: {
   buyQty: number;
   buyPrice: number;
   accountId: string;
+  deductAmountOverride?: number; // 跨币种买入时，实际从账户扣的金额（账户本币）
 }) {
   const newQty = params.oldQty + params.buyQty;
   const newAvgCost =
     (params.oldQty * params.oldPrice + params.buyQty * params.buyPrice) / newQty;
-  const deductAmount = params.buyQty * params.buyPrice;
+  const deductAmount = params.deductAmountOverride ?? params.buyQty * params.buyPrice;
 
   const rpcName = params.table === "stock_holdings" ? "buy_holding" : "buy_crypto";
 
