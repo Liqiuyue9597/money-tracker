@@ -97,12 +97,17 @@ export function BuyDialog({
       toast.error("请填写完整信息");
       return;
     }
+    if (currencyMismatch && actualDeductInput === "") {
+      toast.error("请填写实际扣款金额");
+      return;
+    }
     setLoading(true);
     try {
       // Always pass quantity (shares) and price (nav/unit price) downstream
       const roundedQty = isFund ? parseFloat(buyQty.toFixed(4)) : buyQty;
-      const actualDeduct = currencyMismatch && actualDeductInput !== ""
-        ? parseFloat(actualDeductInput)
+      const parsedActual = parseFloat(actualDeductInput);
+      const actualDeduct = currencyMismatch && !isNaN(parsedActual) && parsedActual > 0
+        ? parsedActual
         : undefined;
       await onConfirm({ quantity: roundedQty, price: prc, accountId, deductAmountOverride: actualDeduct });
       setAmountOrQty("");
