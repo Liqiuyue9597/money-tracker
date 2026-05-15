@@ -23,7 +23,7 @@ interface BuyDialogProps {
   /** Unit label: "股" for stocks, "份" for funds, or a custom string for crypto */
   unitLabel: string;
   /** Called on confirm with { quantity, price, accountId }. Should return a promise that resolves on success. */
-  onConfirm: (data: { quantity: number; price: number; accountId: string }) => Promise<void>;
+  onConfirm: (data: { quantity: number; price: number; accountId: string; deductAmountOverride?: number }) => Promise<void>;
 }
 
 export function BuyDialog({
@@ -44,6 +44,7 @@ export function BuyDialog({
   const [price, setPrice] = useState("");
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [actualDeductInput, setActualDeductInput] = useState("");
 
   const isFund = unitLabel === "份";
 
@@ -78,9 +79,14 @@ export function BuyDialog({
   const newAvgCost = isValid && newQuantity
     ? (currentQuantity * currentBuyPrice + buyQty * prc) / newQuantity
     : null;
-  const deductAmount = isFund
-    ? (isValid ? inputAmount : null)          // fund: deduct = 投入金额
-    : (isValid ? inputAmount * prc : null);   // stock: deduct = qty × price
+  const deductAmount = (() => {
+    if (!isValid) return null;
+    const parsedActualDeduct = parseFloat(actualDeductInput);
+    if (currencyMismatch && !isNaN(parsedActualDeduct) && parsedActualDeduct > 0) {
+      return parsedActualDeduct;
+    }
+    return isFund ? inputAmount : inputAmount * prc;
+  })();
   const remainingBalance =
     deductAmount != null && selectedAccount
       ? Number(selectedAccount.balance) - deductAmount
@@ -95,10 +101,14 @@ export function BuyDialog({
     try {
       // Always pass quantity (shares) and price (nav/unit price) downstream
       const roundedQty = isFund ? parseFloat(buyQty.toFixed(4)) : buyQty;
-      await onConfirm({ quantity: roundedQty, price: prc, accountId });
+      const actualDeduct = currencyMismatch && actualDeductInput !== ""
+        ? parseFloat(actualDeductInput)
+        : undefined;
+      await onConfirm({ quantity: roundedQty, price: prc, accountId, deductAmountOverride: actualDeduct });
       setAmountOrQty("");
       setPrice("");
       setAccountId("");
+      setActualDeductInput("");
       onOpenChange(false);
     } catch (err) {
       console.error("BuyDialog: onConfirm failed", err);
@@ -113,6 +123,7 @@ export function BuyDialog({
       setAmountOrQty("");
       setPrice("");
       setAccountId("");
+      setActualDeductInput("");
     }
     onOpenChange(newOpen);
   }
@@ -176,10 +187,27 @@ export function BuyDialog({
             </select>
           </div>
 
+          {/* 跨币种买入：实际扣款金额 */}
+          {currencyMismatch && (
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">
+                实际扣款金额（{selectedAccount && CURRENCIES[selectedAccount.currency].symbol}，从 IBKR 账单查看）
+              </div>
+              <Input
+                type="number"
+                placeholder={`实际扣款金额（${selectedAccount ? selectedAccount.currency : ""}）`}
+                value={actualDeductInput}
+                onChange={(e) => setActualDeductInput(e.target.value)}
+                step="0.01"
+                className="rounded-xl"
+              />
+            </div>
+          )}
+
           {/* Currency mismatch warning */}
           {currencyMismatch && (
-            <div className="rounded-xl bg-red-50 border border-red-300 p-2 text-xs text-red-800">
-              ⚠️ 币种不匹配：持仓为 {CURRENCIES[holdingCurrency].name}（{holdingCurrency}），账户为 {CURRENCIES[selectedAccount.currency].name}（{selectedAccount.currency}）。扣款金额将以 {holdingCurrency} 计算直接扣减，不做汇率转换。
+            <div className="rounded-xl bg-amber-50 border border-amber-300 p-2 text-xs text-amber-800">
+              ⚠️ 币种不匹配：持仓为 {CURRENCIES[holdingCurrency].name}（{holdingCurrency}），账户为 {CURRENCIES[selectedAccount.currency].name}（{selectedAccount.currency}）。请在上方填写 IBKR 实际扣款金额，持仓成本将以 {holdingCurrency} 记录。
             </div>
           )}
 
@@ -211,7 +239,9 @@ export function BuyDialog({
               <div className="border-t border-dashed border-emerald-300 my-1" />
               <div className="flex justify-between">
                 <span>扣款金额</span>
-                <span className="font-semibold text-red-600">-{formatMoney(deductAmount, holdingCurrency)}</span>
+                <span className="font-semibold text-red-600">
+                  -{formatMoney(deductAmount, currencyMismatch && selectedAccount ? selectedAccount.currency : holdingCurrency)}
+                </span>
               </div>
               {remainingBalance != null && selectedAccount && (
                 <div className="flex justify-between">
