@@ -18,7 +18,7 @@ export function isSupabaseConfigured(): boolean {
 export type Currency = "CNY" | "USD" | "HKD";
 export type TransactionType = "expense" | "income" | "transfer";
 export type StockTransactionType = "buy" | "sell";
-export type AccountType = "cash" | "stock" | "crypto";
+export type AccountType = "cash" | "stock" | "crypto" | "brokerage";
 export type StockAssetType = "fund" | "hk" | "us";
 
 export interface Account {
@@ -66,9 +66,10 @@ export interface Transaction {
 }
 
 export const ACCOUNT_TYPE_CONFIG: Record<AccountType, { label: string; defaultIcon: string }> = {
-  cash:   { label: "现金账户", defaultIcon: "💰" },
-  stock:  { label: "股票",     defaultIcon: "📈" },
-  crypto: { label: "加密货币", defaultIcon: "₿" },
+  cash:      { label: "现金账户", defaultIcon: "💰" },
+  stock:     { label: "股票",     defaultIcon: "📈" },
+  crypto:    { label: "加密货币", defaultIcon: "₿" },
+  brokerage: { label: "证券账户", defaultIcon: "📊" },
 };
 
 export interface Category {

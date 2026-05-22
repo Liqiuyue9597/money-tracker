@@ -30,6 +30,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
   const [initialBalance, setInitialBalance] = useState(editAccount ? String(editAccount.balance) : "0");
   const [excludeFromTotal, setExcludeFromTotal] = useState(editAccount?.exclude_from_total || false);
   const [saving, setSaving] = useState(false);
+  const [accountType, setAccountType] = useState<AccountType>(editAccount?.type === "brokerage" ? "brokerage" : "cash");
 
   // Bank/institution selection state
   const [selectedBank, setSelectedBank] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
       setExcludeFromTotal(editAccount.exclude_from_total || false);
       setSelectedBank(null);
       setCustomBankName("");
+      setAccountType(editAccount.type === "brokerage" ? "brokerage" : "cash");
     } else if (open && !editAccount) {
       setName("");
       setCurrency("CNY");
@@ -56,6 +58,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
       setExcludeFromTotal(false);
       setSelectedBank(null);
       setCustomBankName("");
+      setAccountType("cash");
     }
   }, [open, editAccount]);
 
@@ -87,12 +90,11 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
   async function handleSave() {
     if (!user || !name.trim()) { toast.error("请输入账户名称"); return; }
     setSaving(true);
-    const type: AccountType = "cash";
     if (editAccount) {
       const { error } = await supabase.from("accounts").update({ name: name.trim(), type: editAccount.type, currency, icon, balance: parseFloat(initialBalance) || 0, exclude_from_total: excludeFromTotal }).eq("id", editAccount.id);
       if (error) toast.error("更新失败"); else { toast.success("已更新"); refreshAccounts(); onOpenChange(false); }
     } else {
-      const { error } = await supabase.from("accounts").insert({ user_id: user.id, name: name.trim(), type, currency, icon, balance: parseFloat(initialBalance) || 0, sort_order: 99, exclude_from_total: excludeFromTotal });
+      const { error } = await supabase.from("accounts").insert({ user_id: user.id, name: name.trim(), type: accountType, currency, icon, balance: parseFloat(initialBalance) || 0, sort_order: 99, exclude_from_total: excludeFromTotal });
       if (error) toast.error("创建失败"); else { toast.success(`已添加「${name.trim()}」`); refreshAccounts(); onOpenChange(false); }
     }
     setSaving(false);
@@ -159,6 +161,39 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
                   autoFocus
                 />
               )}
+            </div>
+          )}
+
+          {/* Account type selector — only for new accounts */}
+          {!editAccount && (
+            <div>
+              <div className="section-label mb-2">账户类型</div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAccountType("cash")}
+                  className={`flex-1 py-2 rounded text-[13px] font-medium transition-all ${
+                    accountType === "cash"
+                      ? "bg-[#0A0A0A] text-[#FAFAFA]"
+                      : "text-stone hover:bg-[#F0EFED]"
+                  }`}
+                  style={accountType !== "cash" ? { border: "0.5px solid #E8E6E3" } : {}}
+                >
+                  储蓄账户
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccountType("brokerage")}
+                  className={`flex-1 py-2 rounded text-[13px] font-medium transition-all ${
+                    accountType === "brokerage"
+                      ? "bg-[#0A0A0A] text-[#FAFAFA]"
+                      : "text-stone hover:bg-[#F0EFED]"
+                  }`}
+                  style={accountType !== "brokerage" ? { border: "0.5px solid #E8E6E3" } : {}}
+                >
+                  证券账户
+                </button>
+              </div>
             </div>
           )}
 
