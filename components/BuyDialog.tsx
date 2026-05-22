@@ -50,7 +50,7 @@ export function BuyDialog({
 
   // Sort accounts: same currency first
   const sortedAccounts = useMemo(() => {
-    const cash = accounts.filter((a) => a.type === "cash");
+    const cash = accounts.filter((a) => a.type === "cash" || a.type === "brokerage");
     return [...cash].sort((a, b) => {
       const aMatch = a.currency === holdingCurrency ? 0 : 1;
       const bMatch = b.currency === holdingCurrency ? 0 : 1;
