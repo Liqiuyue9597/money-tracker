@@ -30,14 +30,13 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
   const [initialBalance, setInitialBalance] = useState(editAccount ? String(editAccount.balance) : "0");
   const [excludeFromTotal, setExcludeFromTotal] = useState(editAccount?.exclude_from_total || false);
   const [saving, setSaving] = useState(false);
-  const [accountType, setAccountType] = useState<AccountType>(editAccount?.type === "brokerage" ? "brokerage" : "cash");
+  const [accountType, setAccountType] = useState<AccountType>(editAccount?.type ?? "cash");
 
   // Bank/institution selection state
   const [selectedBank, setSelectedBank] = useState<string | null>(null);
   const [customBankName, setCustomBankName] = useState("");
 
-  // Always show bank picker for new accounts
-  const showBankPicker = !editAccount;
+  const showBankPicker = !editAccount && accountType === "cash";
 
   // Sync state when editAccount or open changes (useState initial values only apply on first render)
   useEffect(() => {
@@ -49,7 +48,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
       setExcludeFromTotal(editAccount.exclude_from_total || false);
       setSelectedBank(null);
       setCustomBankName("");
-      setAccountType(editAccount.type === "brokerage" ? "brokerage" : "cash");
+      setAccountType(editAccount.type);
     } else if (open && !editAccount) {
       setName("");
       setCurrency("CNY");

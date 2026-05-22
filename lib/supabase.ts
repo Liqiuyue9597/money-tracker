@@ -66,7 +66,7 @@ export interface Transaction {
 }
 
 export const ACCOUNT_TYPE_CONFIG: Record<AccountType, { label: string; defaultIcon: string }> = {
-  cash:      { label: "现金账户", defaultIcon: "💰" },
+  cash:      { label: "储蓄账户", defaultIcon: "💰" },
   stock:     { label: "股票",     defaultIcon: "📈" },
   crypto:    { label: "加密货币", defaultIcon: "₿" },
   brokerage: { label: "证券账户", defaultIcon: "📊" },
