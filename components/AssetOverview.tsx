@@ -82,6 +82,7 @@ export function AssetOverview() {
   const cashAccounts = useMemo(() => accounts.filter((a) => a.type === "cash"), [accounts]);
   const positiveAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) >= 0), [cashAccounts]);
   const negativeAccounts = useMemo(() => cashAccounts.filter((a) => Number(a.balance) < 0), [cashAccounts]);
+  const brokerageAccounts = useMemo(() => accounts.filter((a) => a.type === "brokerage"), [accounts]);
 
   // Crypto totals
   const { totalCryptoValue, totalCryptoCost } = useMemo(() => {
@@ -113,7 +114,7 @@ export function AssetOverview() {
     let debt = 0;
     let excluded = 0;
     for (const acc of accounts) {
-      if (acc.type !== "cash") continue;
+      if (acc.type !== "cash" && acc.type !== "brokerage") continue;
       const bal = convertCurrency(Number(acc.balance), acc.currency, mainCurrency, rateMap);
       if (acc.exclude_from_total) {
         excluded += Math.abs(bal);
@@ -332,6 +333,35 @@ export function AssetOverview() {
                   </button>
                 );
               })}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Brokerage accounts */}
+      {brokerageAccounts.length > 0 && (
+        <div className="mb-4">
+          <div className="text-xs text-muted-foreground mb-2 px-1 flex items-center gap-1.5">
+            <Banknote className="h-3.5 w-3.5" /> 证券账户
+          </div>
+          <Card className="border-0 shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              {brokerageAccounts.map((acc, i) => (
+                <button key={acc.id} onClick={() => { setEditAccount(acc); setManagerOpen(true); }}
+                  className={`flex w-full items-center gap-3 px-4 py-3.5 hover:bg-muted/50 transition-colors active:bg-muted ${i > 0 ? "border-t" : ""}`}>
+                  <span className="text-2xl">{acc.icon}</span>
+                  <div className="flex-1 text-left">
+                    <div className="text-sm font-medium flex items-center gap-1.5">
+                      {acc.name}
+                      {acc.exclude_from_total && <span className="text-[10px] text-[#A8A29E] bg-[#F0EFED] px-1.5 py-0.5 rounded">不计入</span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">{CURRENCIES[acc.currency].name}</div>
+                  </div>
+                  <div className={`font-semibold tabular-nums text-sm ${acc.exclude_from_total ? "text-muted-foreground" : ""}`}>
+                    {formatMoney(Number(acc.balance), acc.currency)}
+                  </div>
+                </button>
+              ))}
             </CardContent>
           </Card>
         </div>
