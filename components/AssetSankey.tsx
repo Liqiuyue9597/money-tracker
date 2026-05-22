@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney, type Currency } from "@/lib/supabase";
 
 interface AssetSankeyProps {
-  cashTotal: number;       // positive-balance cash accounts (excl. exclude_from_total)
+  cashTotal: number;       // positive-balance cash & brokerage accounts (excl. exclude_from_total)
   stockValue: number;      // stock portfolio value in mainCurrency
   cryptoValue: number;     // crypto value in mainCurrency
   debtTotal: number;       // absolute value of negative-balance cash accounts
@@ -17,7 +17,7 @@ interface AssetSankeyProps {
 
 // Colors for each node type
 const NODE_COLORS: Record<string, string> = {
-  "现金账户": "#60a5fa",
+  "流动资金": "#60a5fa",
   "股票投资": "#34d399",
   "加密货币": "#fbbf24",
   "公积金等": "#94a3b8",
@@ -195,7 +195,7 @@ export function AssetSankey({
     const linkList: { source: number; target: number; value: number }[] = [];
 
     // Build left-side nodes (only if value > 0)
-    if (cashTotal > 0) nodeList.push({ name: "现金账户" });
+    if (cashTotal > 0) nodeList.push({ name: "流动资金" });
     if (stockValue > 0) nodeList.push({ name: "股票投资" });
     if (cryptoValue > 0) nodeList.push({ name: "加密货币" });
 
@@ -232,7 +232,7 @@ export function AssetSankey({
 
     // Debt link: from 现金账户 → 负债 (only when cash node exists)
     if (debtTotal > 0 && debtIdx >= 0) {
-      const cashNodeIdx = nodeList.findIndex((n) => n.name === "现金账户");
+      const cashNodeIdx = nodeList.findIndex((n) => n.name === "流动资金");
       if (cashNodeIdx >= 0) {
         linkList.push({ source: cashNodeIdx, target: debtIdx, value: debtTotal });
       }

@@ -357,7 +357,7 @@ export function AssetOverview() {
                     </div>
                     <div className="text-[10px] text-muted-foreground">{CURRENCIES[acc.currency].name}</div>
                   </div>
-                  <div className={`font-semibold tabular-nums text-sm ${acc.exclude_from_total ? "text-muted-foreground" : ""}`}>
+                  <div className={`font-semibold tabular-nums text-sm ${Number(acc.balance) < 0 ? "text-red-600" : acc.exclude_from_total ? "text-muted-foreground" : ""}`}>
                     {formatMoney(Number(acc.balance), acc.currency)}
                   </div>
                 </button>

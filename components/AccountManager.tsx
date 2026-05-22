@@ -170,7 +170,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setAccountType("cash")}
+                  onClick={() => { setAccountType("cash"); setName(""); setIcon("💰"); setSelectedBank(null); }}
                   className={`flex-1 py-2 rounded text-[13px] font-medium transition-all ${
                     accountType === "cash"
                       ? "bg-[#0A0A0A] text-[#FAFAFA]"
@@ -182,7 +182,7 @@ export function AccountManager({ open, onOpenChange, editAccount }: AccountManag
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAccountType("brokerage")}
+                  onClick={() => { setAccountType("brokerage"); setName(""); setIcon("📊"); setSelectedBank(null); }}
                   className={`flex-1 py-2 rounded text-[13px] font-medium transition-all ${
                     accountType === "brokerage"
                       ? "bg-[#0A0A0A] text-[#FAFAFA]"
