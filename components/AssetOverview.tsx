@@ -109,8 +109,9 @@ export function AssetOverview() {
   }, [accounts, mainCurrency, rateMap, stockValue, totalCryptoValue]);
 
   // Sankey chart derived values
-  const { cashTotal, debtTotal, excludedTotal, cryptoValueInMain } = useMemo(() => {
+  const { cashTotal, brokerageTotal, debtTotal, excludedTotal, cryptoValueInMain } = useMemo(() => {
     let cash = 0;
+    let brokerage = 0;
     let debt = 0;
     let excluded = 0;
     for (const acc of accounts) {
@@ -119,7 +120,11 @@ export function AssetOverview() {
       if (acc.exclude_from_total) {
         excluded += Math.abs(bal);
       } else if (bal >= 0) {
-        cash += bal;
+        if (acc.type === "brokerage") {
+          brokerage += bal;
+        } else {
+          cash += bal;
+        }
       } else {
         debt += Math.abs(bal);
       }
@@ -127,7 +132,7 @@ export function AssetOverview() {
     const cryptoMain = totalCryptoValue > 0
       ? convertCurrency(totalCryptoValue, "USD", mainCurrency, rateMap)
       : 0;
-    return { cashTotal: cash, debtTotal: debt, excludedTotal: excluded, cryptoValueInMain: cryptoMain };
+    return { cashTotal: cash, brokerageTotal: brokerage, debtTotal: debt, excludedTotal: excluded, cryptoValueInMain: cryptoMain };
   }, [accounts, mainCurrency, rateMap, totalCryptoValue]);
 
   // Realized PnL totals (converted to mainCurrency)
@@ -270,6 +275,7 @@ export function AssetOverview() {
       {/* Asset Composition Sankey */}
       <AssetSankey
         cashTotal={cashTotal}
+        brokerageTotal={brokerageTotal}
         stockValue={stockValue}
         cryptoValue={cryptoValueInMain}
         debtTotal={debtTotal}

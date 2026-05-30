@@ -7,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney, type Currency } from "@/lib/supabase";
 
 interface AssetSankeyProps {
-  cashTotal: number;       // positive-balance cash & brokerage accounts (excl. exclude_from_total)
+  cashTotal: number;       // positive-balance cash accounts (excl. exclude_from_total)
+  brokerageTotal: number;  // positive-balance brokerage accounts (excl. exclude_from_total)
   stockValue: number;      // stock portfolio value in mainCurrency
   cryptoValue: number;     // crypto value in mainCurrency
   debtTotal: number;       // absolute value of negative-balance cash accounts
@@ -17,7 +18,8 @@ interface AssetSankeyProps {
 
 // Colors for each node type
 const NODE_COLORS: Record<string, string> = {
-  "流动资金": "#60a5fa",
+  "储蓄与支付": "#60a5fa",
+  "证券账户": "#3b82f6",
   "股票投资": "#34d399",
   "加密货币": "#fbbf24",
   "公积金等": "#94a3b8",
@@ -170,6 +172,7 @@ function CustomLink(props: SankeyLinkProps) {
 
 export function AssetSankey({
   cashTotal,
+  brokerageTotal,
   stockValue,
   cryptoValue,
   debtTotal,
@@ -195,7 +198,8 @@ export function AssetSankey({
     const linkList: { source: number; target: number; value: number }[] = [];
 
     // Build left-side nodes (only if value > 0)
-    if (cashTotal > 0) nodeList.push({ name: "流动资金" });
+    if (cashTotal > 0) nodeList.push({ name: "储蓄与支付" });
+    if (brokerageTotal > 0) nodeList.push({ name: "证券账户" });
     if (stockValue > 0) nodeList.push({ name: "股票投资" });
     if (cryptoValue > 0) nodeList.push({ name: "加密货币" });
 
@@ -221,6 +225,10 @@ export function AssetSankey({
       linkList.push({ source: linkIdx, target: totalAssetsIdx, value: cashTotal });
       linkIdx++;
     }
+    if (brokerageTotal > 0) {
+      linkList.push({ source: linkIdx, target: totalAssetsIdx, value: brokerageTotal });
+      linkIdx++;
+    }
     if (stockValue > 0) {
       linkList.push({ source: linkIdx, target: totalAssetsIdx, value: stockValue });
       linkIdx++;
@@ -230,21 +238,20 @@ export function AssetSankey({
       linkIdx++;
     }
 
-    // Debt link: from 现金账户 → 负债 (only when cash node exists)
+    // Debt link: from 储蓄与支付 → 负债 (only when cash node exists)
     if (debtTotal > 0 && debtIdx >= 0) {
-      const cashNodeIdx = nodeList.findIndex((n) => n.name === "流动资金");
+      const cashNodeIdx = nodeList.findIndex((n) => n.name === "储蓄与支付");
       if (cashNodeIdx >= 0) {
         linkList.push({ source: cashNodeIdx, target: debtIdx, value: debtTotal });
       }
-      // If no cash node, skip the debt link entirely rather than linking from an unrelated node
     }
 
-    const total = cashTotal + stockValue + cryptoValue;
+    const total = cashTotal + brokerageTotal + stockValue + cryptoValue;
     const net = total - debtTotal;
     const ratio = total > 0 ? (debtTotal / total) * 100 : 0;
 
     return { nodes: nodeList, links: linkList, totalAssets: total, netWorth: net, debtRatio: ratio };
-  }, [cashTotal, stockValue, cryptoValue, debtTotal, excludedTotal]);
+  }, [cashTotal, brokerageTotal, stockValue, cryptoValue, debtTotal, excludedTotal]);
 
   // Create a node renderer that captures totalAssets and mainCurrency
   // Must be before early return to satisfy Rules of Hooks
