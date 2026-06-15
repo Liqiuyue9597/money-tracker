@@ -81,7 +81,6 @@ export function RealizedGainsList() {
   const { data: rates } = useExchangeRates(mainCurrency);
   const rateMap = rates?.rates;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const merged = useMemo(() => mergeGains(gains), [gains]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isAggregated = merged.length !== gains.length;
@@ -140,7 +139,7 @@ export function RealizedGainsList() {
 
       {/* Individual records */}
       <div className="space-y-2">
-        {gains.map((g) => {
+        {merged.map((g) => {
           const isPositive = g.realized_pnl >= 0;
           const currSymbol = CURRENCIES[g.currency as Currency]?.symbol ?? "";
           return (
@@ -177,11 +176,17 @@ export function RealizedGainsList() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-[11px] text-muted-foreground tabular-nums flex-wrap">
-                  <span>成本 {currSymbol}{Number(g.cost_basis).toFixed(2)}</span>
+                  <span>成本 {currSymbol}{g.cost_basis.toFixed(2)}</span>
                   <span>·</span>
-                  <span>收入 {currSymbol}{Number(g.proceeds).toFixed(2)}</span>
+                  <span>收入 {currSymbol}{g.proceeds.toFixed(2)}</span>
                   <span>·</span>
-                  <span>{g.closed_at.slice(0, 10)}</span>
+                  <span>{g.latest_closed_at.slice(0, 10)}</span>
+                  {g.count > 1 && (
+                    <>
+                      <span>·</span>
+                      <span>共 {g.count} 笔</span>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
