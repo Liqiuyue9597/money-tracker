@@ -82,7 +82,6 @@ export function RealizedGainsList() {
   const rateMap = rates?.rates;
 
   const merged = useMemo(() => mergeGains(gains), [gains]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isAggregated = merged.length !== gains.length;
 
   const totalPnl = useMemo(
@@ -123,7 +122,11 @@ export function RealizedGainsList() {
         <CardContent className="p-4 flex items-center justify-between">
           <div>
             <div className="text-xs text-muted-foreground">历史总收益</div>
-            <div className="text-xs text-muted-foreground mt-0.5">共 {gains.length} 笔</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {isAggregated
+                ? `${merged.length} 个标的 · 共 ${gains.length} 笔卖出`
+                : `共 ${gains.length} 笔`}
+            </div>
           </div>
           <div
             className={`text-lg font-bold tabular-nums ${
