@@ -17,11 +17,74 @@ function getAssetTypeLabel(type: string): string {
   }
 }
 
+interface MergedGain {
+  id: string;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  currency: string;
+  cost_basis: number;
+  proceeds: number;
+  realized_pnl: number;
+  realized_pnl_pct: number;
+  latest_closed_at: string;
+  count: number;
+}
+
+function mergeGains(
+  gains: { id: string; symbol: string; name: string; asset_type: string; currency: string; cost_basis: number | string; proceeds: number | string; realized_pnl: number | string; closed_at: string }[]
+): MergedGain[] {
+  const groups = new Map<string, MergedGain>();
+
+  for (const g of gains) {
+    const key = `${g.asset_type}:${g.symbol}`;
+    const cost = Number(g.cost_basis);
+    const proceeds = Number(g.proceeds);
+    const pnl = Number(g.realized_pnl);
+
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        id: g.id,
+        symbol: g.symbol,
+        name: g.name,
+        asset_type: g.asset_type,
+        currency: g.currency,
+        cost_basis: cost,
+        proceeds: proceeds,
+        realized_pnl: pnl,
+        realized_pnl_pct: cost > 0 ? (pnl / cost) * 100 : 0,
+        latest_closed_at: g.closed_at,
+        count: 1,
+      });
+    } else {
+      existing.cost_basis += cost;
+      existing.proceeds += proceeds;
+      existing.realized_pnl += pnl;
+      existing.realized_pnl_pct =
+        existing.cost_basis > 0 ? (existing.realized_pnl / existing.cost_basis) * 100 : 0;
+      existing.count += 1;
+      // 取最新一条的 id / name / closed_at（gains 已按 closed_at desc 排序，所以首次遇到的就是最新）
+      // 这里的分支表示后续遇到的是更早的，不更新 latest 字段
+    }
+  }
+
+  // 输入 gains 已是 closed_at desc，但分组顺序可能与首次出现顺序不一致；按 latest_closed_at desc 重新排序保证稳定
+  return Array.from(groups.values()).sort((a, b) =>
+    a.latest_closed_at < b.latest_closed_at ? 1 : a.latest_closed_at > b.latest_closed_at ? -1 : 0
+  );
+}
+
 export function RealizedGainsList() {
   const { user, mainCurrency } = useApp();
   const { data: gains = [], isLoading, error } = useRealizedGains(user?.id);
   const { data: rates } = useExchangeRates(mainCurrency);
   const rateMap = rates?.rates;
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const merged = useMemo(() => mergeGains(gains), [gains]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isAggregated = merged.length !== gains.length;
 
   const totalPnl = useMemo(
     () =>
