@@ -9,7 +9,7 @@
 - **前端**: Next.js 16 + TypeScript + Tailwind CSS v4 + shadcn/ui (base-ui)
 - **后端/数据库**: Supabase (PostgreSQL + Auth + RLS)
 - **部署**: Vercel (自动部署，push 即生效)
-- **API**: 腾讯财经 (美股/港股)、天天基金 f10 API (国内基金 T+1 官方净值)、CoinGecko (加密货币)、open.er-api.com (汇率)
+- **API**: 腾讯财经 (美股/港股)、蛋卷基金 (国内基金 + 互认基金 968XXX)、CoinGecko (加密货币)、open.er-api.com (汇率)
 
 ## 线上地址
 - **App**: https://money-tracker-pied-one.vercel.app
@@ -29,7 +29,7 @@ app/
 ├── report/page.tsx         # 年度报告
 ├── settings/page.tsx       # 设置
 └── api/
-    ├── stocks/route.ts     # 股票行情代理 (腾讯财经: 美股/港股, 天天基金 f10: 国内基金 T+1 官方净值)
+    ├── stocks/route.ts     # 股票行情代理 (腾讯财经: 美股/港股, 蛋卷: 国内基金 + 互认基金)
     ├── crypto/route.ts     # CoinGecko 加密货币价格代理
     └── exchange/route.ts   # 汇率代理 (open.er-api.com)
 
@@ -177,7 +177,7 @@ vercel --prod        # 手动部署到生产
 - `.env.local` 在 .gitignore 中，不会被提交
 - supabase.ts 中 URL 有 placeholder 兜底，避免构建时静态生成报错
 - 汇率 API 有 1 小时客户端缓存，股票/加密货币 5 分钟服务端缓存
-- 股票行情数据源：腾讯财经（美股前缀 `us`、港股前缀 `r_hk`）+ 天天基金 f10 API（国内基金 6 位代码，返回 T+1 官方净值，非盘中估算）
+- 股票行情数据源：腾讯财经（美股前缀 `us`、港股前缀 `r_hk`）+ 蛋卷基金（`danjuanfunds.com/djapi/fund/{code}`，国内公募 + 968XXX 互认基金，T+1 官方净值）
 - 股票和基金混合管理，通过 symbol 格式自动路由：`.HK` → 港股，6位数字 → 国内基金，其他 → 美股
 - accounts.balance 由触发器自动维护（交易增删改时），也可通过编辑账户手动调整
 

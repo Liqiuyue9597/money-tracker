@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const TIMEOUT_MS = 8000;
 const TENCENT_QT_BASE = "https://qt.gtimg.cn/q=";
-const EASTMONEY_LSJZ_BASE = "https://api.fund.eastmoney.com/f10/lsjz";
-const EASTMONEY_PINGZHONG_BASE = "https://fund.eastmoney.com/pingzhongdata/";
+const DANJUAN_FUND_BASE = "https://danjuanfunds.com/djapi/fund/";
 
 // Cache: symbol -> { data, timestamp }
 const cache = new Map<
@@ -99,58 +98,48 @@ function parseTencentUSQuote(
 }
 
 /**
- * Parse Eastmoney f10/lsjz historical NAV response (T+1 official NAV)
- * Format: {"Data":{"LSJZList":[{"FSRQ":"2026-07-22","DWJZ":"4.9620","JZZZL":"-3.12",...}],...},"ErrCode":0,...}
- * DWJZ = 单位净值, JZZZL = 净值增长率 (%), FSRQ = 净值发布日期
+ * Parse Danjuan fund detail response.
+ * Format: {"data":{"fd_code":"000979","fd_name":"...","fund_derived":{"end_date":"2026-07-22","unit_nav":"4.9620","nav_grtd":"-3.1238",...}}}
+ * unit_nav = 单位净值, nav_grtd = 当日涨跌幅 (%), end_date = 净值发布日期
+ * Failure mode: {"result_code":600001,"message":"..."} without a `data` key.
  */
-function parseEastmoneyLsjz(
+function parseDanjuanFund(
   raw: string,
-  symbol: string,
-  name: string
+  symbol: string
 ): Record<string, unknown> | null {
   try {
-    const data = JSON.parse(raw);
-    const list = data?.Data?.LSJZList;
-    if (!Array.isArray(list) || list.length === 0) return null;
+    const json = JSON.parse(raw);
+    const data = json?.data;
+    if (!data || !data.fund_derived) return null;
 
-    const latest = list[0];
-    const nav = parseFloat(latest.DWJZ) || 0;
-    const changePercent = parseFloat(latest.JZZZL) || 0;
+    const derived = data.fund_derived;
+    const nav = parseFloat(derived.unit_nav) || 0;
+    const changePercent = parseFloat(derived.nav_grtd) || 0;
     if (nav <= 0) return null;
 
-    // Derive change from previous day's NAV if available, else back-compute from percentage
-    const prevNav = list.length > 1 ? parseFloat(list[1].DWJZ) : nav / (1 + changePercent / 100);
-    const previousClose = prevNav > 0 ? prevNav : nav;
+    // Danjuan doesn't expose previous NAV directly, back-compute from percentage
+    const previousClose = nav / (1 + changePercent / 100);
     const change = nav - previousClose;
 
     return {
       symbol,
-      name: name || symbol,
+      name: data.fd_name || data.fd_full_name || symbol,
       price: nav,
       nav,
       estimate: nav,
       change: parseFloat(change.toFixed(4)),
-      changePercent,
-      previousClose,
+      changePercent: parseFloat(changePercent.toFixed(4)),
+      previousClose: parseFloat(previousClose.toFixed(4)),
       high: nav,
       low: nav,
-      open: previousClose,
+      open: parseFloat(previousClose.toFixed(4)),
       currency: "CNY",
       isFund: true,
-      navDate: latest.FSRQ || "",
+      navDate: derived.end_date || "",
     };
   } catch {
     return null;
   }
-}
-
-/**
- * Extract fund name from pingzhongdata JS file
- * Format: ...var fS_name = "景顺长城沪港深精选股票A";...
- */
-function parsePingzhongName(raw: string): string {
-  const match = raw.match(/var\s+fS_name\s*=\s*"([^"]+)"/);
-  return match ? match[1] : "";
 }
 
 /**
@@ -190,38 +179,27 @@ async function fetchUSQuote(
 }
 
 /**
- * Fetch fund NAV from Eastmoney f10/lsjz (T+1 official NAV).
- * Fires the NAV endpoint and the name endpoint in parallel.
- * The old fundgz.1234567.com.cn/js/*.js endpoint went offline (returns 404 HTML page
- * for all fund codes as of 2026-07), so we switched to the official f10 API — no more
- * intraday estimated NAV (gsz), only the T+1 published NAV which is what you actually
- * buy/sell at anyway.
+ * Fetch fund NAV from Danjuan (蛋卷基金 - 雪球旗下).
+ * Covers both mainland public funds (000979, 110022...) and HK Mutual Recognition
+ * funds (968XXX), which Eastmoney's f10 API does not cover. Returns T+1 official NAV.
+ * History: originally used fundgz.1234567.com.cn (intraday gsz) until it went offline
+ * in 2026-07; briefly used Eastmoney f10/lsjz but it missed 968XXX funds.
  */
 async function fetchFundQuote(
   symbol: string
 ): Promise<Record<string, unknown> | null> {
-  const referer = `https://fund.eastmoney.com/${symbol}.html`;
-  const navUrl = `${EASTMONEY_LSJZ_BASE}?fundCode=${symbol}&pageIndex=1&pageSize=2`;
-  const nameUrl = `${EASTMONEY_PINGZHONG_BASE}${symbol}.js`;
+  const res = await fetch(`${DANJUAN_FUND_BASE}${symbol}`, {
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: {
+      Referer: "https://danjuanfunds.com/",
+      "User-Agent": "Mozilla/5.0",
+    },
+  });
+  if (!res.ok) return null;
 
-  const [navRes, nameRes] = await Promise.all([
-    fetch(navUrl, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { Referer: referer, "User-Agent": "Mozilla/5.0" },
-    }),
-    fetch(nameUrl, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { Referer: referer, "User-Agent": "Mozilla/5.0" },
-    }).catch(() => null),
-  ]);
-
-  if (!navRes.ok) return null;
-  const navText = await navRes.text();
-  // Guard against HTML error pages returning HTTP 200
-  if (navText.trim().startsWith("<")) return null;
-
-  const name = nameRes && nameRes.ok ? parsePingzhongName(await nameRes.text()) : "";
-  return parseEastmoneyLsjz(navText, symbol, name);
+  const raw = await res.text();
+  if (raw.trim().startsWith("<")) return null;
+  return parseDanjuanFund(raw, symbol);
 }
 
 export async function GET(request: NextRequest) {
