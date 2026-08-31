@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import useSWR, { type SWRConfiguration } from "swr";
-import { supabase, type Transaction, type StockHolding, type CryptoHolding, type UserSetting, type RealizedGain } from "@/lib/supabase";
+import { supabase, type Transaction, type StockHolding, type CryptoHolding, type UserSetting, type RealizedGain, type Tag } from "@/lib/supabase";
 import { getStockQuotes, type StockQuote } from "@/lib/stocks";
 import { getCryptoPrices, type CryptoPrice } from "@/lib/crypto";
 import { getExchangeRates, type ExchangeRates } from "@/lib/exchange";
@@ -18,6 +18,7 @@ export interface TransactionWithJoins extends Transaction {
   categories?: { name: string; icon: string } | null;
   accounts?: { name: string; icon: string } | null;
   to_accounts?: { name: string; icon: string } | null;
+  tags?: Array<{ id: string; name: string }>;
 }
 
 // ---------- hooks ----------
@@ -32,40 +33,55 @@ export function useMonthTransactions(userId: string | undefined, month: Date) {
     async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, categories(name, icon), accounts:accounts!transactions_account_id_fkey(name, icon)")
+        .select("*, categories(name, icon), accounts:accounts!transactions_account_id_fkey(name, icon), transaction_tags(tag:tags(id, name))")
         .eq("user_id", userId!)
         .gte("date", mStart)
         .lte("date", mEnd)
         .order("date", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      
+
+      // Flatten transaction_tags → tags array
+      type RowWithJoins = TransactionWithJoins & {
+        transaction_tags?: Array<{ tag: { id: string; name: string } | null }> | null;
+      };
+      const rows: TransactionWithJoins[] = (data ?? []).map((raw) => {
+        const r = raw as unknown as RowWithJoins;
+        const tags = (r.transaction_tags ?? [])
+          .map((tt) => tt.tag)
+          .filter((t): t is { id: string; name: string } => !!t);
+        // strip raw join field
+        const { transaction_tags: _ignored, ...rest } = r;
+        void _ignored;
+        return { ...rest, tags };
+      });
+
       // Fetch to_accounts separately for transfer transactions
-      if (data && data.length > 0) {
-        const toAccountIds = data
-          .filter(t => t.to_account_id)
-          .map(t => t.to_account_id!);
-        
+      if (rows.length > 0) {
+        const toAccountIds = rows
+          .filter((t) => t.to_account_id)
+          .map((t) => t.to_account_id!);
+
         if (toAccountIds.length > 0) {
           const { data: toAccounts, error: toError } = await supabase
             .from("accounts")
             .select("id, name, icon")
             .in("id", toAccountIds);
-          
+
           if (toError) throw toError;
-          
+
           const toAccountsMap = new Map(
-            (toAccounts || []).map(a => [a.id, { name: a.name, icon: a.icon }])
+            (toAccounts || []).map((a) => [a.id, { name: a.name, icon: a.icon }])
           );
-          
-          return data.map(t => ({
+
+          return rows.map((t) => ({
             ...t,
             to_accounts: t.to_account_id ? toAccountsMap.get(t.to_account_id) || null : null,
           }));
         }
       }
-      
-      return data ?? [];
+
+      return rows;
     },
     defaultConfig,
   );
@@ -258,6 +274,94 @@ export function useRealizedGains(userId: string | undefined) {
         .select("*")
         .eq("user_id", userId!)
         .order("closed_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    defaultConfig,
+  );
+}
+
+/** Tags — all user tags, most-used first */
+export function useTags(userId: string | undefined) {
+  return useSWR<Tag[]>(
+    userId ? ["tags", userId] : null,
+    async () => {
+      const { data, error } = await supabase
+        .from("tags")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("usage_count", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    defaultConfig,
+  );
+}
+
+/** Recent months' transactions — single fetch over [monthOffset..now], for trend calcs */
+export function useRecentMonthsTransactions(
+  userId: string | undefined,
+  monthsBack: number,
+) {
+  const now = new Date();
+  const start = startOfMonth(new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 1));
+  const end = endOfMonth(now);
+  const startKey = format(start, "yyyy-MM-dd");
+  const endKey = format(end, "yyyy-MM-dd");
+
+  return useSWR<TransactionWithJoins[]>(
+    userId ? ["transactions-recent", userId, startKey, endKey] : null,
+    async () => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("*, categories(name, icon), accounts:accounts!transactions_account_id_fkey(name, icon)")
+        .eq("user_id", userId!)
+        .gte("date", startKey)
+        .lte("date", endKey)
+        .order("date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as TransactionWithJoins[];
+    },
+    defaultConfig,
+  );
+}
+
+// ---------- net_worth_snapshots ----------
+export interface NetWorthSnapshot {
+  id: string;
+  user_id: string;
+  snapshot_date: string;
+  cash_cny: number;
+  cash_usd: number;
+  cash_hkd: number;
+  brokerage_cny: number;
+  brokerage_usd: number;
+  brokerage_hkd: number;
+  stock_cost_cny: number;
+  stock_market_cny: number;
+  crypto_cost_cny: number;
+  crypto_market_cny: number;
+  excluded_cny: number;
+  excluded_usd: number;
+  excluded_hkd: number;
+  rate_usd_to_cny: number | null;
+  rate_hkd_to_cny: number | null;
+  source: "auto" | "backfill" | "manual";
+}
+
+/** Year snapshots — for annual net-worth curve */
+export function useYearSnapshots(userId: string | undefined, year: number) {
+  return useSWR<NetWorthSnapshot[]>(
+    userId ? ["snapshots-year", userId, year] : null,
+    async () => {
+      const { data, error } = await supabase
+        .from("net_worth_snapshots")
+        .select("*")
+        .eq("user_id", userId!)
+        .gte("snapshot_date", `${year}-01-01`)
+        .lte("snapshot_date", `${year}-12-31`)
+        .order("snapshot_date", { ascending: true });
       if (error) throw error;
       return data ?? [];
     },

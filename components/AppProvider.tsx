@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { supabase, type Account, type Category, type Currency } from "@/lib/supabase";
+import { supabase, type Account, type Category, type Currency, type Tag } from "@/lib/supabase";
 import { useUserSettings } from "@/lib/swr-hooks";
 import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -12,12 +12,14 @@ interface AppContextType {
   loading: boolean;
   categories: Category[];
   accounts: Account[];
+  tags: Tag[];
   mainCurrency: Currency;
   setMainCurrency: (c: Currency) => void;
   monthlyBudget: number | null;
   setMonthlyBudget: (v: number) => Promise<void>;
   refreshCategories: () => Promise<void>;
   refreshAccounts: () => Promise<void>;
+  refreshTags: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -131,6 +133,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     swrOpts,
   );
 
+  // ---------- SWR for tags ----------
+  const tagsKey = user ? ["tags", user.id] : null;
+  const { data: tags = [] } = useSWR<Tag[]>(
+    tagsKey,
+    async () => {
+      const { data, error } = await supabase
+        .from("tags")
+        .select("*")
+        .eq("user_id", user!.id)
+        .order("usage_count", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    swrOpts,
+  );
+
   // ---------- refresh helpers (same API as before) ----------
   const refreshCategories = useCallback(async () => {
     if (categoriesKey) await globalMutate(categoriesKey);
@@ -139,6 +158,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshAccounts = useCallback(async () => {
     if (accountsKey) await globalMutate(accountsKey);
   }, [accountsKey]);
+
+  const refreshTags = useCallback(async () => {
+    if (tagsKey) await globalMutate(tagsKey);
+  }, [tagsKey]);
 
   // ---------- auth methods ----------
   const signIn = useCallback(async (email: string, password: string) => {
@@ -161,16 +184,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loading: authLoading,
     categories,
     accounts,
+    tags,
     mainCurrency: mainCurrencyLocal,
     setMainCurrency,
     monthlyBudget,
     setMonthlyBudget,
     refreshCategories,
     refreshAccounts,
+    refreshTags,
     signIn,
     signUp,
     signOut,
-  }), [user, authLoading, categories, accounts, mainCurrencyLocal, setMainCurrency, monthlyBudget, setMonthlyBudget, refreshCategories, refreshAccounts, signIn, signUp, signOut]);
+  }), [user, authLoading, categories, accounts, tags, mainCurrencyLocal, setMainCurrency, monthlyBudget, setMonthlyBudget, refreshCategories, refreshAccounts, refreshTags, signIn, signUp, signOut]);
 
   return (
     <AppContext.Provider value={value}>

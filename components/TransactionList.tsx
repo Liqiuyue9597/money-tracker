@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useTransition } from "react";
 import { useApp } from "@/components/AppProvider";
-import { type Currency, CURRENCIES, formatMoney } from "@/lib/supabase";
+import { type Currency, CURRENCIES, formatMoney, tagColor } from "@/lib/supabase";
 import { useMonthTransactions, type TransactionWithJoins } from "@/lib/swr-hooks";
 import { supabase } from "@/lib/supabase";
 import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
@@ -31,7 +31,10 @@ export function TransactionList() {
           !search ||
           t.note?.toLowerCase().includes(search.toLowerCase()) ||
           t.categories?.name?.toLowerCase().includes(search.toLowerCase()) ||
-          (t.type === "transfer" && "转账".includes(search.toLowerCase()))
+          (t.type === "transfer" && "转账".includes(search.toLowerCase())) ||
+          (t.tags ?? []).some((tag) =>
+            tag.name.toLowerCase().includes(search.toLowerCase())
+          )
       ),
     [transactions, search]
   );
@@ -212,6 +215,21 @@ export function TransactionList() {
                                   <p className="text-xs text-muted-foreground">
                                     {t.note}
                                   </p>
+                                )}
+                                {(t.tags?.length ?? 0) > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {t.tags!.map((tag) => {
+                                      const c = tagColor(tag.name);
+                                      return (
+                                        <span
+                                          key={tag.id}
+                                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${c.bg} ${c.fg}`}
+                                        >
+                                          #{tag.name}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                             </div>

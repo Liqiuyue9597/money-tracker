@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useApp } from "@/components/AppProvider";
 import { formatMoney, type Currency } from "@/lib/supabase";
-import { useMonthTransactions } from "@/lib/swr-hooks";
+import { useMonthTransactions, useRecentMonthsTransactions } from "@/lib/swr-hooks";
 import { format, subMonths, endOfMonth } from "date-fns";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,6 +48,8 @@ export function Dashboard() {
   // Current & previous month transactions
   const { data: transactions, isLoading: txLoading } = useMonthTransactions(user?.id, now);
   const { data: prevTransactions } = useMonthTransactions(user?.id, prevMonth);
+  // Past 4 months (current + prev 3) for steady-state trend
+  const { data: recentTx } = useRecentMonthsTransactions(user?.id, 4);
 
   // Derive current month stats
   const { monthExpense, monthIncome, topCategories } = useMemo(() => {
@@ -92,6 +94,44 @@ export function Dashboard() {
     }
     return { expense, income, catMap };
   }, [prevTransactions]);
+
+  // Steady-state: strip P95+ large tx across recent 4 months; compare current-month steady vs prev-3-month steady avg
+  const steady = useMemo(() => {
+    if (!recentTx || recentTx.length === 0) return null;
+    const expenses = recentTx.filter((t) => t.type === "expense");
+    if (expenses.length < 20) return null; // not enough data
+    const amounts = expenses.map((t) => Number(t.amount)).sort((a, b) => a - b);
+    const p95Idx = Math.floor(amounts.length * 0.95);
+    const p95Raw = amounts[Math.min(p95Idx, amounts.length - 1)] || 0;
+
+    // Round P95 up to nearest human-friendly threshold — stable across small data changes
+    const buckets = [50, 100, 200, 300, 500, 1000, 2000, 5000, 10000];
+    const threshold = buckets.find((b) => b >= p95Raw) ?? Math.ceil(p95Raw / 1000) * 1000;
+
+    const currentKey = format(now, "yyyy-MM");
+    let currentSteady = 0;
+    const prev3MonthSums: Record<string, number> = {};
+    for (const t of expenses) {
+      const amt = Number(t.amount);
+      if (amt > threshold) continue; // skip large one-offs
+      const monthKey = t.date.substring(0, 7);
+      if (monthKey === currentKey) {
+        currentSteady += amt;
+      } else {
+        prev3MonthSums[monthKey] = (prev3MonthSums[monthKey] ?? 0) + amt;
+      }
+    }
+    const prev3Months = Object.values(prev3MonthSums);
+    if (prev3Months.length === 0) return null;
+    const prev3Avg = prev3Months.reduce((a, b) => a + b, 0) / prev3Months.length;
+    return {
+      currentSteady,
+      prev3Avg,
+      diff: currentSteady - prev3Avg,
+      diffPct: prev3Avg > 0 ? ((currentSteady - prev3Avg) / prev3Avg) * 100 : null,
+      threshold,
+    };
+  }, [recentTx, now]);
 
   // Budget calculations
   const budgetPct = useMemo(() => {
@@ -169,6 +209,45 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Steady-state expense card */}
+      {steady && (
+        <Card className="mb-4">
+          <CardContent className="pt-0">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-sm">稳态支出</p>
+              <span className="text-[10px] text-muted-foreground">
+                剔除单笔 &gt; {formatMoney(steady.threshold, mainCurrency)}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[11px] text-muted-foreground">本月</p>
+                <p className="text-lg font-bold tabular-nums">
+                  {formatMoney(steady.currentSteady, mainCurrency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">过去 3 月均</p>
+                <p className="text-lg font-bold tabular-nums text-muted-foreground">
+                  {formatMoney(steady.prev3Avg, mainCurrency)}
+                </p>
+              </div>
+            </div>
+            {steady.diffPct != null && Math.abs(steady.diff) > 1 && (
+              <p className={`text-[11px] mt-2 tabular-nums ${
+                steady.diff > 0 ? "text-red-500" : "text-emerald-500"
+              }`}>
+                {steady.diff > 0 ? "↑ 比 3 月均高" : "↓ 比 3 月均低"}
+                {" "}
+                {formatMoney(Math.abs(steady.diff), mainCurrency)}
+                {" "}
+                ({steady.diff > 0 ? "+" : ""}{steady.diffPct.toFixed(1)}%)
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Budget Progress */}
       {monthlyBudget != null ? (

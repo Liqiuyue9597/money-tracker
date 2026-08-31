@@ -64,6 +64,7 @@ lib/
 | AccountType | 说明 | 管理入口 |
 |---|---|---|
 | `cash` | 所有"钱"类资产：银行卡、信用卡、现金、支付宝、微信、公积金等 | AccountManager 对话框 |
+| `brokerage` | 证券账户（富途、IBKR 等），既是现金又是股票的载体，可作为买卖股票的资金账户 | AccountManager 对话框 |
 | `stock` | 股票持仓（通过 stock_holdings 表管理） | StockPortfolio / stocks 页面 |
 | `crypto` | 加密货币持仓（通过 crypto_holdings 表管理） | AssetOverview 内置对话框 |
 
@@ -93,7 +94,7 @@ lib/
 ### accounts 表关键字段
 ```sql
 id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclude_from_total, created_at
--- type CHECK: 'cash', 'stock', 'crypto'
+-- type CHECK: 'cash', 'brokerage', 'stock', 'crypto'
 -- balance: 由触发器自动维护，不可手动修改
 -- exclude_from_total: 不计入总资产净值（如公积金）
 ```
@@ -115,7 +116,7 @@ id, user_id, name, type, currency, icon, balance, sort_order, is_archived, exclu
 ### 类型定义 (lib/supabase.ts)
 - `Currency`: "CNY" | "USD" | "HKD"
 - `TransactionType`: "expense" | "income" | "transfer"
-- `AccountType`: "cash" | "stock" | "crypto"
+- `AccountType`: "cash" | "brokerage" | "stock" | "crypto"
 - `BankPreset`: { name, icon, types } — 银行/机构预设列表
 - 主要接口: Transaction, Category, Account, StockHolding, CryptoHolding, UserSetting
 

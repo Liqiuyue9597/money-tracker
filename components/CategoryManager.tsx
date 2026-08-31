@@ -63,7 +63,11 @@ export function CategoryManager({
           .update({ name: name.trim(), icon })
           .eq("id", editCategory.id);
         if (error) {
-          toast.error("更新失败");
+          if (error.code === "23505") {
+            toast.error(`已存在同名分类「${name.trim()}」`);
+          } else {
+            toast.error("更新失败");
+          }
         } else {
           toast.success("已更新");
           await refreshCategories();
@@ -79,7 +83,11 @@ export function CategoryManager({
           usage_count: 0,
         });
         if (error) {
-          toast.error("创建失败");
+          if (error.code === "23505") {
+            toast.error(`已存在同名分类「${name.trim()}」`);
+          } else {
+            toast.error("创建失败");
+          }
         } else {
           toast.success(`已添加「${name.trim()}」`);
           await refreshCategories();

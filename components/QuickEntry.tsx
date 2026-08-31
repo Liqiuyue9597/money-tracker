@@ -14,9 +14,10 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowDownUp, Delete, Check, ArrowRight, X } from "lucide-react";
+import { TagChips } from "@/components/TagChips";
 
 export function QuickEntry() {
-  const { user, categories, accounts, refreshAccounts } = useApp();
+  const { user, categories, accounts, tags, refreshAccounts, refreshTags } = useApp();
   const router = useRouter();
   const [amount, setAmount] = useState("0");
   const [type, setType] = useState<TransactionType>("expense");
@@ -26,6 +27,8 @@ export function QuickEntry() {
   const [toAccountId, setToAccountId] = useState<string>("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [selectedNewTagNames, setSelectedNewTagNames] = useState<string[]>([]);
 
   const isTransfer = type === "transfer";
 
@@ -101,11 +104,51 @@ export function QuickEntry() {
         record.category_id = categoryId;
       }
 
-      const { error } = await supabase.from("transactions").insert(record);
+      const { data: inserted, error } = await supabase
+        .from("transactions")
+        .insert(record)
+        .select("id")
+        .single();
 
       if (error) {
         toast.error("保存失败: " + error.message);
       } else {
+        // Handle tags: create new tags first, then link all
+        const totalTags = selectedTagIds.length + selectedNewTagNames.length;
+        if (inserted?.id && totalTags > 0) {
+          const tagIdsToLink: string[] = [...selectedTagIds];
+
+          if (selectedNewTagNames.length > 0) {
+            const { data: newTags, error: tagErr } = await supabase
+              .from("tags")
+              .insert(
+                selectedNewTagNames.map((name) => ({
+                  user_id: user.id,
+                  name,
+                }))
+              )
+              .select("id");
+            if (tagErr) {
+              console.error("Failed to create new tags:", tagErr);
+            } else if (newTags) {
+              tagIdsToLink.push(...newTags.map((t) => t.id));
+            }
+          }
+
+          if (tagIdsToLink.length > 0) {
+            const { error: linkErr } = await supabase
+              .from("transaction_tags")
+              .insert(
+                tagIdsToLink.map((tag_id) => ({
+                  transaction_id: inserted.id,
+                  tag_id,
+                }))
+              );
+            if (linkErr) console.error("Failed to link tags:", linkErr);
+          }
+          refreshTags();
+        }
+
         if (isTransfer) {
           const fromAcc = accounts.find((a) => a.id === accountId);
           const toAcc = accounts.find((a) => a.id === toAccountId);
@@ -121,6 +164,8 @@ export function QuickEntry() {
         setAmount("0");
         setNote("");
         setCategoryId("");
+        setSelectedTagIds([]);
+        setSelectedNewTagNames([]);
         refreshAccounts();
         router.refresh();
       }
@@ -354,6 +399,26 @@ export function QuickEntry() {
           className="rounded-xl bg-muted/50 border-0 h-10"
         />
       </div>
+
+      {/* Tag chips — hidden in transfer mode */}
+      {!isTransfer && (
+        <div className="px-4 pb-3">
+          <TagChips
+            allTags={tags}
+            selectedTagIds={selectedTagIds}
+            selectedNewTagNames={selectedNewTagNames}
+            onToggleExisting={(id) =>
+              setSelectedTagIds((prev) =>
+                prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+              )
+            }
+            onAddNew={(name) => setSelectedNewTagNames((prev) => [...prev, name])}
+            onRemoveNew={(name) =>
+              setSelectedNewTagNames((prev) => prev.filter((n) => n !== name))
+            }
+          />
+        </div>
+      )}
 
       {/* Keypad */}
       <div className="px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] border-t">

@@ -82,6 +82,33 @@ export interface Category {
   usage_count: number;
 }
 
+export interface Tag {
+  id: string;
+  user_id: string;
+  name: string;
+  usage_count: number;
+  created_at: string;
+}
+
+const TAG_COLORS = [
+  { bg: "bg-rose-100",    fg: "text-rose-700" },
+  { bg: "bg-amber-100",   fg: "text-amber-700" },
+  { bg: "bg-lime-100",    fg: "text-lime-700" },
+  { bg: "bg-emerald-100", fg: "text-emerald-700" },
+  { bg: "bg-cyan-100",    fg: "text-cyan-700" },
+  { bg: "bg-blue-100",    fg: "text-blue-700" },
+  { bg: "bg-violet-100",  fg: "text-violet-700" },
+  { bg: "bg-fuchsia-100", fg: "text-fuchsia-700" },
+] as const;
+
+export function tagColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return TAG_COLORS[h % TAG_COLORS.length];
+}
+
+export const TAG_MAX_PER_TX = 3;
+
 export interface StockHolding {
   id: string;
   user_id: string;
