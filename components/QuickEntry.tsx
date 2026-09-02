@@ -13,11 +13,12 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowDownUp, Delete, Check, ArrowRight, X } from "lucide-react";
-import { TagChips } from "@/components/TagChips";
+import { ArrowDownUp, Delete, Check, ArrowRight, X, ChevronDown, ChevronUp } from "lucide-react";
+
+const COLLAPSED_CATEGORY_COUNT = 8;
 
 export function QuickEntry() {
-  const { user, categories, accounts, tags, refreshAccounts, refreshTags } = useApp();
+  const { user, categories, accounts, refreshAccounts } = useApp();
   const router = useRouter();
   const [amount, setAmount] = useState("0");
   const [type, setType] = useState<TransactionType>("expense");
@@ -27,8 +28,7 @@ export function QuickEntry() {
   const [toAccountId, setToAccountId] = useState<string>("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [selectedNewTagNames, setSelectedNewTagNames] = useState<string[]>([]);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   const isTransfer = type === "transfer";
 
@@ -104,51 +104,13 @@ export function QuickEntry() {
         record.category_id = categoryId;
       }
 
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from("transactions")
-        .insert(record)
-        .select("id")
-        .single();
+        .insert(record);
 
       if (error) {
         toast.error("保存失败: " + error.message);
       } else {
-        // Handle tags: create new tags first, then link all
-        const totalTags = selectedTagIds.length + selectedNewTagNames.length;
-        if (inserted?.id && totalTags > 0) {
-          const tagIdsToLink: string[] = [...selectedTagIds];
-
-          if (selectedNewTagNames.length > 0) {
-            const { data: newTags, error: tagErr } = await supabase
-              .from("tags")
-              .insert(
-                selectedNewTagNames.map((name) => ({
-                  user_id: user.id,
-                  name,
-                }))
-              )
-              .select("id");
-            if (tagErr) {
-              console.error("Failed to create new tags:", tagErr);
-            } else if (newTags) {
-              tagIdsToLink.push(...newTags.map((t) => t.id));
-            }
-          }
-
-          if (tagIdsToLink.length > 0) {
-            const { error: linkErr } = await supabase
-              .from("transaction_tags")
-              .insert(
-                tagIdsToLink.map((tag_id) => ({
-                  transaction_id: inserted.id,
-                  tag_id,
-                }))
-              );
-            if (linkErr) console.error("Failed to link tags:", linkErr);
-          }
-          refreshTags();
-        }
-
         if (isTransfer) {
           const fromAcc = accounts.find((a) => a.id === accountId);
           const toAcc = accounts.find((a) => a.id === toAccountId);
@@ -164,8 +126,6 @@ export function QuickEntry() {
         setAmount("0");
         setNote("");
         setCategoryId("");
-        setSelectedTagIds([]);
-        setSelectedNewTagNames([]);
         refreshAccounts();
         router.refresh();
       }
@@ -209,6 +169,7 @@ export function QuickEntry() {
             onClick={() => {
               setType("expense");
               setCategoryId("");
+              setShowAllCategories(false);
             }}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
               type === "expense"
@@ -222,6 +183,7 @@ export function QuickEntry() {
             onClick={() => {
               setType("income");
               setCategoryId("");
+              setShowAllCategories(false);
             }}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
               type === "income"
@@ -372,7 +334,10 @@ export function QuickEntry() {
       {!isTransfer && (
         <div className="px-4 pb-3">
           <div className="grid grid-cols-4 gap-2">
-            {filteredCategories.map((cat) => (
+            {(showAllCategories
+              ? filteredCategories
+              : filteredCategories.slice(0, COLLAPSED_CATEGORY_COUNT)
+            ).map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setCategoryId(cat.id)}
@@ -386,6 +351,23 @@ export function QuickEntry() {
                 <span className="text-xs font-medium">{cat.name}</span>
               </button>
             ))}
+            {filteredCategories.length > COLLAPSED_CATEGORY_COUNT && (
+              <button
+                onClick={() => setShowAllCategories((v) => !v)}
+                className="flex flex-col items-center gap-1 py-3 rounded-xl bg-muted/30 text-muted-foreground hover:bg-muted transition-all active:scale-95"
+              >
+                <span className="text-xl">
+                  {showAllCategories ? (
+                    <ChevronUp className="h-5 w-5" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5" />
+                  )}
+                </span>
+                <span className="text-xs font-medium">
+                  {showAllCategories ? "收起" : "更多"}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -399,26 +381,6 @@ export function QuickEntry() {
           className="rounded-xl bg-muted/50 border-0 h-10"
         />
       </div>
-
-      {/* Tag chips — hidden in transfer mode */}
-      {!isTransfer && (
-        <div className="px-4 pb-3">
-          <TagChips
-            allTags={tags}
-            selectedTagIds={selectedTagIds}
-            selectedNewTagNames={selectedNewTagNames}
-            onToggleExisting={(id) =>
-              setSelectedTagIds((prev) =>
-                prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-              )
-            }
-            onAddNew={(name) => setSelectedNewTagNames((prev) => [...prev, name])}
-            onRemoveNew={(name) =>
-              setSelectedNewTagNames((prev) => prev.filter((n) => n !== name))
-            }
-          />
-        </div>
-      )}
 
       {/* Keypad */}
       <div className="px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] border-t">
